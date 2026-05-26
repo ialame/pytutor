@@ -1,0 +1,105 @@
+# =============================================================================
+# Python
+# =============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Test / coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# =============================================================================
+# Secrets et configuration locale
+# =============================================================================
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# =============================================================================
+# IDE et éditeurs
+# =============================================================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# =============================================================================
+# Bases vectorielles générées (Phase 2 RAG)
+# =============================================================================
+chroma_db/
+chroma_db_*/
+
+# Cache local HuggingFace (modèles d'embeddings)
+.cache/
+
+# =============================================================================
+# LaTeX (artefacts de compilation)
+# =============================================================================
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.dvi
+*.fdb_latexmk
+*.fls
+*.lof
+*.log
+*.lot
+*.out
+*.run.xml
+*.synctex.gz
+*.toc
+*.nav
+*.snm
+*.vrb
+
+# minted (cache de coloration syntaxique)
+_minted/
+_minted-*/
+
+# Les .pdf sont versionnés par défaut (livrables pédagogiques).
+# Décommente la ligne ci-dessous pour les exclure :
+# *.pdf
+
+# =============================================================================
+# Node (UI éventuelle Phase 4+)
+# =============================================================================
+node_modules/
+package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# =============================================================================
+# Divers
+# =============================================================================
+out/

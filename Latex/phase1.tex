@@ -1,0 +1,1624 @@
+% =====================================================================
+% Phase 1 — LangChain LCEL : 5 concepts essentiels
+% Document unifié regroupant ChatPromptTemplate, sortie structurée Pydantic,
+% composition LCEL + .partial(), RunnableParallel, et streaming.
+% Compilation : pdflatex -shell-escape phase1.tex (deux fois pour la TOC)
+% Pré-requis  : pygmentize (pip install Pygments) + paquet TeX "minted"
+% =====================================================================
+\documentclass[11pt,a4paper]{article}
+
+% ---------- Encodage & langue ----------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+
+% ---------- Mise en page ----------
+\usepackage[a4paper,margin=2.2cm]{geometry}
+\usepackage{parskip}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!60!black,
+  urlcolor=blue!60!black,
+  citecolor=blue!60!black,
+  bookmarksopen=true,
+  bookmarksopenlevel=2,
+}
+
+% ---------- Boîtes & callouts ----------
+\usepackage[most]{tcolorbox}
+\tcbset{
+  enhanced,
+  colback=blue!3,
+  colframe=blue!50!black,
+  fonttitle=\bfseries,
+  arc=2pt, boxrule=0.6pt,
+}
+
+% ---------- Code avec minted ----------
+\usepackage{minted}
+\setminted{
+  fontsize=\small,
+  linenos=true,
+  numbersep=6pt,
+  frame=lines,
+  framesep=2mm,
+  bgcolor=gray!4,
+  breaklines=true,
+  breakanywhere=true,
+  python3=true,
+  tabsize=4,
+}
+\newminted{python}{}
+
+% ---------- TikZ (union des librairies des 5 concepts) ----------
+\usepackage{tikz}
+\usetikzlibrary{
+  arrows.meta, positioning, shapes.geometric, shapes.misc,
+  fit, backgrounds, calc, trees,
+  decorations.pathreplacing, decorations.markings,
+}
+
+\tikzset{
+  node distance=8mm and 12mm,
+  block/.style={
+    rectangle, rounded corners=2pt, draw=blue!60!black, fill=blue!8,
+    minimum width=42mm, minimum height=9mm, align=center, font=\small
+  },
+  data/.style={
+    rectangle, rounded corners=1pt, draw=gray!60, fill=gray!10,
+    minimum width=42mm, minimum height=8mm, align=center, font=\footnotesize\ttfamily
+  },
+  llm/.style={
+    rectangle, rounded corners=2pt, draw=red!60!black, fill=red!8,
+    minimum width=42mm, minimum height=9mm, align=center, font=\small
+  },
+  msg/.style={
+    rectangle, rounded corners=1pt, draw=purple!60!black, fill=purple!8,
+    minimum width=56mm, minimum height=8mm, align=left, font=\scriptsize\ttfamily
+  },
+  schema/.style={
+    rectangle, rounded corners=2pt, draw=teal!60!black, fill=teal!8,
+    minimum width=48mm, minimum height=9mm, align=center, font=\small
+  },
+  pipeop/.style={
+    circle, draw=blue!60!black, fill=blue!15, minimum size=6mm, font=\bfseries\small
+  },
+  parallel/.style={
+    rectangle, rounded corners=2pt, draw=violet!60!black, fill=violet!8,
+    minimum width=48mm, minimum height=9mm, align=center, font=\small
+  },
+  token/.style={
+    rectangle, rounded corners=1pt, draw=teal!60!black, fill=teal!10,
+    minimum height=6mm, font=\scriptsize\ttfamily, inner sep=2pt
+  },
+  flow/.style={-{Stealth[length=2.2mm]}, thick, draw=blue!60!black},
+  flowdata/.style={-{Stealth[length=2.2mm]}, thick, draw=gray!60, dashed},
+  label/.style={font=\scriptsize\itshape, fill=white, inner sep=1pt},
+  timearrow/.style={-{Stealth[length=2.5mm]}, very thick, draw=black!70},
+  bar/.style={rectangle, draw=blue!60!black, fill=blue!20, minimum height=4mm, font=\scriptsize},
+}
+
+% ---------- Titre ----------
+\title{\textbf{Phase 1 — LangChain LCEL}\\
+\large Le moteur d'explication structurée : cinq concepts essentiels}
+\author{Cours PyTutor2}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+Ce document couvre les cinq briques fondamentales de la phase 1 du cours
+PyTutor2~: les \texttt{ChatPromptTemplate}, la sortie typée avec Pydantic
+et \texttt{with\_structured\_output}, la composition LCEL avec \texttt{|}
+et \texttt{.partial()}, l'exécution parallèle avec
+\texttt{RunnableParallel}, et le streaming token par token avec
+\texttt{.stream()}. Chaque concept est traité avec un énoncé, une
+architecture illustrée en TikZ, le code complet, des explications pas à pas
+et la vérification dans LangSmith.
+\end{abstract}
+
+\tableofcontents
+\bigskip
+
+% #####################################################################
+% #####################################################################
+\section{\texttt{ChatPromptTemplate} : structurer un prompt en messages paramétrés}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice 1. \texttt{ChatPromptTemplate}]
+On veut produire un assistant pédagogique Python dont le \textbf{ton et la
+profondeur} s'adaptent au niveau de l'élève (débutant, intermédiaire, avancé).
+Le concept à expliquer change à chaque requête, le niveau aussi.
+
+\textbf{Contrainte}~: ne pas écrire trois prompts différents, ni concaténer des
+strings à la main. On veut \emph{un seul} template réutilisable, avec deux
+variables \texttt{\{level\}} et \texttt{\{concept\}}, qui sera ensuite consommé
+par n'importe quel modèle compatible LangChain.
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Comprendre pourquoi un prompt moderne est une \textbf{liste de messages typés},
+        pas une chaîne de caractères.
+  \item Maîtriser la séparation \texttt{system} / \texttt{human} et son rôle pour
+        la qualité des réponses.
+  \item Utiliser les \textbf{variables} \texttt{\{nom\}} d'un template et savoir
+        ce qu'elles deviennent au moment du rendu.
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\begin{center}
+\begin{tikzpicture}
+  \node[data] (in) {\{"level": "débutant",\\\ "concept": "lambda"\}};
+  \node[block, below=of in] (tpl) {ChatPromptTemplate\\\texttt{from\_messages([...])}};
+  \node[msg, below=of tpl, text width=72mm] (msgs)
+    {SystemMessage("Tu es un assistant\dots\\\hspace*{1em}Niveau actuel : débutant\dots")\\
+     HumanMessage("Explique : lambda")};
+  \node[block, below=of msgs] (model) {Modèle de chat\\(ChatAnthropic, etc.)};
+
+  \draw[flowdata] (in)   -- (tpl);
+  \draw[flow]     (tpl)  -- (msgs) node[label, midway, right]{\texttt{.invoke(dict)}};
+  \draw[flowdata] (msgs) -- (model);
+\end{tikzpicture}
+\end{center}
+
+Un \texttt{ChatPromptTemplate} est essentiellement une \textbf{fonction}
+\texttt{dict $\to$ List[BaseMessage]}. Les variables \texttt{\{level\}} et
+\texttt{\{concept\}} sont substituées dans le contenu de chaque message au
+moment du rendu.
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+from langchain_core.prompts import ChatPromptTemplate
+
+EXPLAIN_PROMPT = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        "Tu es un assistant pédagogique pour des élèves apprenant Python. "
+        "Tu adaptes systématiquement ton vocabulaire et tes exemples au "
+        "niveau de l'élève. Niveau actuel : {level}.\n\n"
+        "Règles selon le niveau :\n"
+        "  - 'débutant' : pas de jargon, exemples ultra-simples, "
+        "analogies du quotidien, pas plus de 10 lignes de code.\n"
+        "  - 'intermédiaire' : tu peux supposer la syntaxe de base "
+        "connue, montre les usages idiomatiques (PEP 8, type hints).\n"
+        "  - 'avancé' : montre les détails du modèle objet de Python, "
+        "les subtilités, les cas limites, les implications de performance."
+    ),
+    ("human", "Explique le concept suivant : {concept}"),
+])
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — Pourquoi une \emph{liste de messages} et pas un string}
+
+Les modèles de chat modernes (Claude, GPT-4, Gemini, etc.) ne reçoivent pas
+un prompt monolithique~: ils reçoivent une \textbf{conversation structurée}
+sous forme de messages typés. Chaque message a un \texttt{role}
+(\texttt{system}, \texttt{user}/\texttt{human}, \texttt{assistant}) et un
+contenu. L'API du fournisseur les traite différemment~:
+
+\begin{itemize}[leftmargin=*]
+  \item Le \texttt{system} fixe la \textbf{personnalité} et les règles du
+        jeu, et reçoit le plus de poids dans le respect des instructions.
+  \item Les \texttt{human} sont les requêtes de l'utilisateur.
+  \item Les \texttt{assistant} sont les réponses précédentes du modèle
+        (utile pour du multi-tour, on les verra plus tard).
+\end{itemize}
+
+\begin{quote}\itshape
+Mettre les \emph{règles} dans le \texttt{system} et la \emph{requête} dans
+le \texttt{human} n'est pas cosmétique~: les LLM modernes obéissent
+nettement mieux à une instruction présente dans le message système qu'à la
+même instruction noyée dans le message utilisateur. Si le ton de ton
+assistant dérive, c'est souvent que tu as mis tes règles au mauvais endroit.
+\end{quote}
+
+\subsubsection*{Étape 2 — La syntaxe \texttt{from\_messages([...])}}
+
+\texttt{from\_messages} accepte une liste de \textbf{tuples} de la forme
+\texttt{(role, content)}~:
+
+\begin{center}
+\begin{tabular}{ll}
+\texttt{("system", "\dots")}     & devient un \texttt{SystemMessagePromptTemplate} \\
+\texttt{("human",  "\dots")}     & devient un \texttt{HumanMessagePromptTemplate} \\
+\texttt{("ai",     "\dots")}     & devient un \texttt{AIMessagePromptTemplate} \\
+\texttt{("placeholder", "\{x\}")} & insère une liste de messages stockée dans \texttt{x} \\
+\end{tabular}
+\end{center}
+
+LangChain transforme automatiquement chaque tuple en un objet
+\texttt{PromptTemplate} de la bonne classe, et l'ensemble compose un
+\texttt{ChatPromptTemplate}.
+
+\subsubsection*{Étape 3 — Les variables \texttt{\{nom\}}}
+
+Toutes les accolades non-doublées dans une chaîne de message sont
+considérées comme des \textbf{variables}~:
+
+\begin{itemize}[leftmargin=*]
+  \item \texttt{\{concept\}} dans le \texttt{human} attend une clé
+        \texttt{concept} dans le dict d'entrée.
+  \item \texttt{\{level\}} dans le \texttt{system} attend une clé
+        \texttt{level}.
+  \item Si une clé manque au moment du rendu, LangChain lève une
+        \texttt{KeyError} explicite.
+\end{itemize}
+
+\begin{quote}\itshape
+Si tu veux écrire une \emph{vraie} accolade dans le prompt (par exemple,
+demander au modèle de répondre en JSON), il faut la \textbf{doubler}~:
+\texttt{\{\{} pour un \texttt{\{} littéral, \texttt{\}\}} pour un \texttt{\}}.
+C'est le piège classique qui transforme un message en
+\texttt{KeyError: 'nom\_de\_clé\_inattendu'} dès qu'on parle de structures
+JSON dans le prompt.
+\end{quote}
+
+\subsubsection*{Étape 4 — Le rendu via \texttt{.invoke()} ou \texttt{.format\_messages()}}
+
+\begin{center}
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[node distance=6mm and 14mm]
+  \node[data] (in) {\{"level": "débutant",\\\ "concept": "lambda"\}};
+  \node[block, right=of in] (tpl) {EXPLAIN\_PROMPT};
+  \node[msg, right=of tpl, text width=66mm] (out)
+    {[SystemMessage("\dots Niveau : débutant\dots"),\\\ HumanMessage("Explique : lambda")]};
+
+  \draw[flowdata] (in)  -- (tpl);
+  \draw[flow]     (tpl) -- (out) node[label, midway, above]{\texttt{.invoke(\dots)}};
+\end{tikzpicture}%
+}
+\end{center}
+
+Deux façons d'appeler le template~:
+
+\begin{enumerate}[leftmargin=*]
+  \item \texttt{EXPLAIN\_PROMPT.invoke(\{"level": "débutant", "concept": "lambda"\})}
+        renvoie un \texttt{ChatPromptValue} (qu'on passe ensuite au modèle).
+        C'est la voie LCEL, utilisée quand le template est dans une chaîne
+        \texttt{prompt | model | \dots}
+  \item \texttt{EXPLAIN\_PROMPT.format\_messages(\dots)} renvoie directement
+        la liste de \texttt{BaseMessage}. Pratique pour \textbf{déboguer} ou
+        pour passer les messages à une API tierce.
+\end{enumerate}
+
+\begin{quote}\itshape
+\texttt{.format\_messages(\dots)} est le \emph{print} du prompt engineer.
+Avant de te demander pourquoi le modèle répond bizarrement, imprime ce que
+\textbf{tu lui as réellement envoyé} — souvent l'erreur est là.
+\end{quote}
+
+\subsection{Vérification dans LangSmith}
+
+\subsubsection*{Comment voir le prompt rendu}
+
+Quand le template est utilisé dans une chaîne et que LangSmith est activé,
+chaque appel au modèle produit un run \texttt{ChatAnthropic} (ou équivalent)
+dans lequel l'onglet \emph{Input} contient \textbf{exactement les messages
+rendus}~:
+
+\begin{center}
+\begin{tikzpicture}[every node/.style={font=\footnotesize\ttfamily, anchor=west}]
+  \node                              (a) {RunnableSequence};
+  \node[below=1mm of a, xshift=4mm]  (b) {ChatPromptTemplate};
+  \node[below=1mm of b, xshift=4mm]  (c) {Input  : \{level: "débutant", concept: "lambda"\}};
+  \node[below=1mm of c]              (d) {Output : [SystemMessage(...), HumanMessage(...)]};
+  \node[below=1mm of d, xshift=-4mm] (e) {ChatAnthropic};
+  \node[below=1mm of e, xshift=4mm]  (f) {Input  : la liste de messages ci-dessus};
+\end{tikzpicture}
+\end{center}
+
+\subsubsection*{Les trois choses à regarder}
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{L'onglet \emph{Input} du nœud \texttt{ChatPromptTemplate}}~: tu
+        vois le dict d'entrée brut. C'est là que tu repères une variable
+        manquante ou mal typée.
+  \item \textbf{L'onglet \emph{Output} du même nœud}~: la liste complète des
+        messages, variables substituées, prêts à partir au LLM. C'est la
+        \textbf{vérité terrain} de ce que le modèle reçoit.
+  \item \textbf{L'onglet \emph{Input} du nœud \texttt{ChatAnthropic}}~: en
+        principe identique à l'output du template ci-dessus. Si tu y vois
+        autre chose, c'est qu'un \texttt{Runnable} intermédiaire a modifié
+        les messages.
+\end{enumerate}
+
+\begin{quote}\itshape
+Change la valeur de \texttt{level} entre \texttt{"débutant"} et
+\texttt{"avancé"} pour le \emph{même} concept. Dans LangSmith, tu vois
+\textbf{la même structure de messages}, seul le contenu du \texttt{system}
+diffère. C'est la visualisation directe de la paramétrisation par template.
+\end{quote}
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item Un prompt de chat est une \textbf{liste de messages typés}, pas un
+        string. Le rôle (\texttt{system}/\texttt{human}/\texttt{ai}) change
+        radicalement la façon dont le modèle traite le contenu.
+  \item \texttt{ChatPromptTemplate.from\_messages([...])} est la voie
+        idiomatique pour construire ce prompt. Les tuples \texttt{(role,
+        content)} sont la forme la plus lisible.
+  \item Les \textbf{variables} \texttt{\{nom\}} dans le contenu deviennent
+        des clés attendues du dict d'entrée. Doubler les accolades pour les
+        accolades littérales.
+  \item \texttt{prompt.invoke(dict)} renvoie un \texttt{ChatPromptValue}
+        pour la chaîne LCEL ; \texttt{prompt.format\_messages(dict)} renvoie
+        la liste brute, indispensable pour le débogage.
+  \item Mettre les règles dans le \texttt{system}, la requête dans le
+        \texttt{human}. C'est l'erreur \#1 qui fait dériver le ton d'un
+        assistant.
+\end{enumerate}
+\par}
+
+% #####################################################################
+% #####################################################################
+\section{Sortie typée : schémas Pydantic et \texttt{with\_structured\_output}}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice 2. Sortie typée avec Pydantic]
+Un assistant pédagogique ne doit pas répondre par un pavé de texte
+markdown. On veut un objet manipulable~: une \emph{explication structurée}
+contenant l'intuition, un exemple de code, un piège fréquent et une liste
+de questions de compréhension. Chaque champ a une sémantique précise,
+chaque question a sa réponse attendue.
+
+\textbf{Contrainte}~: la réponse doit être \emph{immédiatement utilisable}
+en Python, sans étape de parsing fragile. \texttt{result.intuition} doit
+fonctionner ; \texttt{result.comprehension\_questions[0].expected\_answer}
+aussi.
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Comprendre pourquoi exiger une \textbf{sortie structurée} d'un LLM
+        change la nature du code qu'on écrit autour.
+  \item Décrire un schéma de réponse avec \texttt{pydantic.BaseModel} et
+        \texttt{Field(description=\dots)}.
+  \item Maîtriser \texttt{model.with\_structured\_output(Schema)} et savoir
+        ce qui se passe \textbf{sous le capot} (tool-calling).
+  \item Reconnaître les cas où il faut \emph{imbriquer} des sous-schémas.
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\subsubsection*{Vue d'ensemble}
+
+\begin{center}
+\begin{tikzpicture}
+  \node[data]                 (in)     {\{"concept": "générateurs",\\\ "level": "intermédiaire"\}};
+  \node[block, below=of in]   (prompt) {ChatPromptTemplate};
+  \node[schema, right=14mm of prompt] (schema) {Schéma Pydantic\\\texttt{Explanation}};
+  \node[llm,   below=of prompt] (model) {Modèle de chat\\\texttt{.with\_structured\_output(\dots)}};
+  \node[data, below=of model] (out)    {Explanation(\\\hspace*{1em}intuition=\dots,\\\hspace*{1em}code\_example=\dots,\\\hspace*{1em}pitfall=\dots,\\\hspace*{1em}comprehension\_questions=[\dots])};
+
+  \draw[flowdata] (in)     -- (prompt);
+  \draw[flow]     (prompt) -- (model);
+  \draw[flow]     (schema) -- (model) node[label, midway, above]{contraint};
+  \draw[flow]     (model)  -- (out)   node[label, midway, right]{objet Python};
+\end{tikzpicture}
+\end{center}
+
+Le schéma Pydantic est \textbf{injecté dans l'appel} au modèle. Le SDK
+Anthropic l'expose comme un \emph{tool} que Claude doit appeler ; la
+réponse en JSON est ensuite désérialisée vers un vrai objet Python.
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+from pydantic import BaseModel, Field
+
+class ComprehensionQuestion(BaseModel):
+    """Une question de compréhension pour vérifier l'acquisition."""
+
+    question: str = Field(description="La question posée à l'élève.")
+    expected_answer: str = Field(
+        description="La réponse attendue, en une à deux phrases."
+    )
+
+
+class Explanation(BaseModel):
+    """Réponse pédagogique complète sur un concept Python."""
+
+    concept: str = Field(description="Le nom du concept expliqué.")
+    intuition: str = Field(
+        description=(
+            "Explication intuitive en exactement 3 phrases. "
+            "Évite le jargon, vise la clarté pour l'élève."
+        )
+    )
+    code_example: str = Field(
+        description=(
+            "Un exemple de code Python minimal et commenté qui illustre "
+            "le concept. Préfère des noms de variables parlants."
+        )
+    )
+    pitfall: str = Field(
+        description="Un piège classique que rencontrent les élèves sur ce concept."
+    )
+    comprehension_questions: list[ComprehensionQuestion] = Field(
+        description="Exactement 3 questions de compréhension, de difficulté croissante."
+    )
+
+
+# Utilisation dans une chaîne LCEL
+def explain_chain_for_level(level: str):
+    model = get_model().with_structured_output(Explanation)
+    return EXPLAIN_PROMPT.partial(level=level) | model
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — Pourquoi structurer la sortie}
+
+Sans schéma, un LLM répond en texte libre. Le code applicatif doit alors
+\emph{parser} cette réponse~: regex, \texttt{json.loads}, conventions de
+markdown\dots\ Chaque appel devient un pari sur le fait que le modèle
+respectera bien le format demandé. En production, ce pari échoue
+régulièrement~: virgule manquante, guillemets inversés, balise oubliée.
+
+\begin{quote}\itshape
+\textbf{Faire écrire le format au modèle est moins fiable que le lui
+imposer.} La sortie structurée renverse la responsabilité~: ce n'est plus
+le modèle qui « doit essayer de respecter » un format ; c'est l'API qui
+\textbf{refuse} toute sortie qui ne le respecte pas. Le code applicatif
+récupère un objet typé, point.
+\end{quote}
+
+\subsubsection*{Étape 2 — Le schéma comme \emph{contrat} de réponse}
+
+Un schéma Pydantic n'est pas un simple type~: c'est une description
+\textbf{lisible par le LLM}. Quand on appelle
+\texttt{with\_structured\_output(Explanation)}, LangChain transforme la
+classe en une \emph{spécification de tool} qui contient~:
+
+\begin{itemize}[leftmargin=*]
+  \item Le nom du schéma (\texttt{Explanation}).
+  \item Le \texttt{docstring} de la classe (« Réponse pédagogique complète
+        sur un concept Python »).
+  \item Pour chaque champ~: son nom, son type, et surtout sa
+        \texttt{description=}.
+\end{itemize}
+
+\begin{quote}\itshape
+La \texttt{description=} de chaque \texttt{Field} \textbf{est une partie du
+prompt}. Le modèle la lit pour décider quoi mettre dans le champ. Soigne-la
+au moins autant que ton message système.
+\end{quote}
+
+\subsubsection*{Étape 3 — Les types qui parlent au modèle}
+
+\begin{center}
+\begin{tabular}{ll}
+\texttt{str}                     & champ texte libre \\
+\texttt{int}, \texttt{float}     & nombre, validation automatique \\
+\texttt{bool}                    & vrai / faux \\
+\texttt{Literal["a", "b", "c"]}  & ensemble \textbf{fermé} de valeurs (= énumération) \\
+\texttt{list[X]}                 & liste typée (peut être un sous-schéma) \\
+\texttt{X | None}                & champ optionnel \\
+\texttt{BaseModel} imbriqué      & sous-objet typé (cf. \texttt{ComprehensionQuestion}) \\
+\end{tabular}
+\end{center}
+
+Tous ces types sont traduits en JSON Schema. Le LLM reçoit ce schéma et
+sait, par exemple, qu'un champ \texttt{Literal} n'a que 3 valeurs
+possibles — il ne pourra \emph{physiquement pas} en renvoyer une quatrième.
+
+\subsubsection*{Étape 4 — L'imbrication de schémas}
+
+\begin{center}
+\begin{tikzpicture}[node distance=4mm and 10mm]
+  \node[schema] (parent) {\texttt{Explanation}};
+  \node[schema, below right=8mm and 8mm of parent, xshift=10mm]
+      (child)  {\texttt{ComprehensionQuestion}};
+  \node[data, right=of parent] (fields)
+      {\texttt{concept: str}\\
+       \texttt{intuition: str}\\
+       \texttt{code\_example: str}\\
+       \texttt{pitfall: str}\\
+       \texttt{comprehension\_questions:}\\
+       \texttt{\ \ list[ComprehensionQuestion]}};
+  \node[data, right=of child] (subfields)
+      {\texttt{question: str}\\
+       \texttt{expected\_answer: str}};
+
+  \draw[flow] (parent) -- (fields);
+  \draw[flow] (child)  -- (subfields);
+  \draw[flowdata] (parent) -- (child)
+       node[label, midway, right, xshift=2mm]{liste imbriquée};
+\end{tikzpicture}
+\end{center}
+
+\texttt{Explanation} contient une \texttt{list[ComprehensionQuestion]}.
+Chaque question dans la liste est elle-même un objet typé, qu'on peut
+itérer en Python~:
+
+\begin{pythoncode}
+for q in result.comprehension_questions:
+    print(q.question)            # str
+    print(q.expected_answer)     # str
+\end{pythoncode}
+
+\begin{quote}\itshape
+\textbf{Les sous-schémas sont la voie idiomatique pour modéliser des listes
+d'objets} (questions, étapes, sources, citations\dots). Évite de stocker du
+JSON sérialisé dans un champ \texttt{str} — tu perds la validation et
+l'auto-complétion.
+\end{quote}
+
+\subsubsection*{Étape 5 — Ce qui se passe sous le capot (tool-calling)}
+
+\begin{center}
+\begin{tikzpicture}[node distance=6mm and 14mm]
+  \node[block]                (a) {Schéma \texttt{Explanation}};
+  \node[block, below=of a]    (b) {JSON Schema généré};
+  \node[block, below=of b]    (c) {Tool envoyé à l'API Anthropic};
+  \node[llm,   right=of c]    (d) {Claude\\(tool-calling)};
+  \node[block, above=of d]    (e) {Tool call JSON\\(arguments du tool)};
+  \node[block, above=of e]    (f) {Désérialisation\\$\to$ objet \texttt{Explanation}};
+
+  \draw[flow] (a) -- (b) node[label, midway, right]{Pydantic};
+  \draw[flow] (b) -- (c) node[label, midway, right]{LangChain};
+  \draw[flow] (c) -- (d);
+  \draw[flow] (d) -- (e) node[label, midway, right]{Claude « appelle » le tool};
+  \draw[flow] (e) -- (f);
+\end{tikzpicture}
+\end{center}
+
+\texttt{with\_structured\_output} \textbf{n'invente pas} un parseur de
+réponse texte. Il déclare un \emph{tool} virtuel auprès du modèle, dont les
+arguments \textbf{sont} les champs du schéma. Claude est alors quasi-forcé
+d'« appeler » ce tool ; les arguments arrivent en JSON valide, validés par
+Pydantic, et reconvertis en objet Python.
+
+\begin{quote}\itshape
+Si tu utilises un modèle qui \emph{ne supporte pas} le tool-calling natif
+(certains modèles open-source), \texttt{with\_structured\_output} retombe
+sur un parsing texte plus fragile. Vérifie toujours que le modèle ciblé
+supporte les tools — c'est le cas de tous les Claude \texttt{messages}, de
+GPT-4, et de Gemini.
+\end{quote}
+
+\subsubsection*{Étape 6 — L'objet de sortie côté Python}
+
+\begin{pythoncode}
+chain = explain_chain_for_level("intermédiaire")
+result: Explanation = chain.invoke({"concept": "les générateurs Python"})
+
+# result est un VRAI objet Python.
+# - PyCharm autocomplète result.intuition, result.pitfall, etc.
+# - mypy / Pyright valident les accès.
+# - On peut le sérialiser avec result.model_dump_json(indent=2).
+print(result.intuition)
+for q in result.comprehension_questions:
+    print(f"- {q.question}")
+\end{pythoncode}
+
+\begin{quote}\itshape
+Le \texttt{result: Explanation} en annotation de type est important. Sans
+elle, l'IDE pense que \texttt{result} est de type \texttt{Any} et tu perds
+l'auto-complétion sur les champs. C'est le \emph{cadeau} de la sortie
+structurée — sois sûr de l'utiliser.
+\end{quote}
+
+\subsection{Vérification dans LangSmith}
+
+\subsubsection*{L'arbre d'exécution attendu}
+
+\begin{center}
+\begin{tikzpicture}[every node/.style={font=\footnotesize\ttfamily, anchor=west}]
+  \node                              (a) {RunnableSequence};
+  \node[below=1mm of a, xshift=4mm]  (b) {ChatPromptTemplate};
+  \node[below=1mm of b, xshift=0mm]  (c) {ChatAnthropic  (structured\_output=Explanation)};
+  \node[below=1mm of c, xshift=4mm]  (d) {  Input  : List[BaseMessage]};
+  \node[below=1mm of d]              (e) {  Output : Explanation(...)};
+  \node[below=1mm of e]              (f) {  Tool call : Explanation(\{\dots\})};
+\end{tikzpicture}
+\end{center}
+
+\subsubsection*{Les trois choses à regarder}
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Onglet \emph{Tool calls} du nœud \texttt{ChatAnthropic}}~:
+        tu y vois le tool \texttt{Explanation} déclaré, avec son JSON
+        Schema complet (les types et les \texttt{description=} de chaque
+        champ). C'est la \textbf{preuve} que ton schéma est bien transmis
+        au modèle.
+  \item \textbf{Onglet \emph{Output}}~: la réponse brute du modèle est un
+        tool-call dont les \texttt{args} contiennent les champs du schéma.
+        LangChain la transforme automatiquement en objet \texttt{Explanation}.
+  \item \textbf{Onglet \emph{Costs}}~: noter que la sortie structurée coûte
+        légèrement plus cher en tokens d'entrée (le schéma est envoyé) mais
+        souvent moins en tokens de sortie (le modèle ne génère pas de
+        préambule du genre « Voici votre réponse en JSON\dots »).
+\end{enumerate}
+
+\begin{quote}\itshape
+Modifie une \texttt{description=} d'un champ et relance. Tu vois dans
+LangSmith que la nouvelle description est immédiatement présente dans le
+tool envoyé au LLM, et que le contenu du champ change conformément. C'est
+le \emph{prompt engineering} appliqué directement au schéma de sortie.
+\end{quote}
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Sortie structurée} = on impose au LLM un schéma de
+        réponse, on récupère un \emph{objet Python typé}, plus de parsing
+        fragile.
+  \item \texttt{pydantic.BaseModel} + \texttt{Field(description=\dots)} est
+        la voie standard. Les descriptions sont \emph{lues par le modèle},
+        elles font partie du prompt.
+  \item \texttt{model.with\_structured\_output(Schema)} fonctionne via le
+        \textbf{tool-calling} natif des API modernes — donc fiable, sans
+        ré-essais ni parseur custom.
+  \item Types puissants à connaître~: \texttt{Literal[\dots]} pour les
+        énumérations, \texttt{BaseModel} imbriqué pour les sous-objets,
+        \texttt{list[Schema]} pour les listes typées.
+  \item Annoter \texttt{result: MonSchema} dans le code applicatif pour
+        bénéficier de l'auto-complétion et de la vérification statique.
+\end{enumerate}
+\par}
+
+% #####################################################################
+% #####################################################################
+\section{LCEL : composition avec \texttt{|} et figement de variables avec \texttt{.partial()}}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice 3. Composition LCEL avec \texttt{|} et \texttt{.partial()}]
+On dispose d'un prompt unique \texttt{EXPLAIN\_PROMPT} qui prend deux
+variables \texttt{\{level\}} et \texttt{\{concept\}}. On veut produire
+\textbf{trois chaînes spécialisées} (débutant, intermédiaire, avancé),
+chacune n'attendant plus que \texttt{\{concept\}} en entrée — le niveau
+étant déjà figé.
+
+\textbf{Contrainte}~: pas de duplication du prompt, pas de fonction
+\texttt{if/elif} qui réécrit la chaîne à chaque appel. La spécialisation
+doit se faire \textbf{à la construction}, et chaque chaîne produite doit
+rester un \texttt{Runnable} composable, traçable et streamable.
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Comprendre LCEL (\emph{LangChain Expression Language}) comme une
+        \textbf{algèbre de composition} de \texttt{Runnable}.
+  \item Maîtriser l'opérateur \texttt{|} et le type qu'il produit.
+  \item Utiliser \texttt{.partial()} pour figer une variable d'un prompt et
+        produire des \textbf{chaînes spécialisées sans dupliquer de code}.
+  \item Reconnaître le pattern \emph{fabrique} (\emph{factory}) pour
+        construire dynamiquement des chaînes paramétrées.
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\subsubsection*{La composition par \texttt{|}}
+
+\begin{center}
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[node distance=4mm and 8mm]
+  \node[data] (in) {\{"concept": "lambda"\}};
+  \node[block, right=of in] (prompt) {prompt\\ (Runnable)};
+  \node[pipeop, right=of prompt] (op1) {\textbar};
+  \node[llm, right=of op1] (model) {model\\ (Runnable)};
+  \node[data, right=of model] (out) {Explanation(\dots)};
+
+  \draw[flowdata] (in)     -- (prompt);
+  \draw[flow]     (prompt) -- (op1);
+  \draw[flow]     (op1)    -- (model);
+  \draw[flow]     (model)  -- (out);
+
+  \begin{scope}[on background layer]
+    \node[draw=blue!40!black, dashed, rounded corners=3pt, inner sep=3mm,
+          fit=(prompt) (op1) (model), label=below:{\footnotesize\itshape un seul Runnable composé}] {};
+  \end{scope}
+\end{tikzpicture}%
+}
+\end{center}
+
+\texttt{prompt | model} crée un nouveau \texttt{Runnable} qui chaîne les
+deux. La sortie du gauche devient l'entrée du droit. C'est typé, c'est
+composable, c'est traçable.
+
+\subsubsection*{Le figement par \texttt{.partial()}}
+
+\begin{center}
+\begin{tikzpicture}[node distance=5mm and 14mm]
+  \node[block] (orig) {EXPLAIN\_PROMPT\\\scriptsize attend \texttt{\{level, concept\}}};
+  \node[block, below=of orig, fill=yellow!15, draw=orange!70!black]
+      (partial) {EXPLAIN\_PROMPT.partial(level="débutant")\\\scriptsize attend juste \texttt{\{concept\}}};
+  \node[block, right=24mm of orig] (orig2) {EXPLAIN\_PROMPT};
+  \node[block, below=of orig2, fill=yellow!15, draw=orange!70!black]
+      (partial2) {.partial(level="avancé")\\\scriptsize attend juste \texttt{\{concept\}}};
+
+  \draw[flow] (orig)  -- (partial)  node[label, midway, right]{fige \texttt{level}};
+  \draw[flow] (orig2) -- (partial2) node[label, midway, right]{fige \texttt{level}};
+\end{tikzpicture}
+\end{center}
+
+\texttt{.partial()} ne mute pas le prompt d'origine~: il renvoie une
+\textbf{nouvelle} version partiellement renseignée. C'est l'équivalent de
+\texttt{functools.partial} pour les prompts.
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+from langchain_core.prompts import ChatPromptTemplate
+from config import get_model
+
+EXPLAIN_PROMPT = ChatPromptTemplate.from_messages([
+    ("system", "Tu es un assistant pédagogique Python. "
+               "Niveau actuel : {level}."),
+    ("human",  "Explique : {concept}"),
+])
+
+def explain_chain_for_level(level: str):
+    """Renvoie une chaîne dont le niveau est figé.
+
+    `.partial(level=...)` crée un nouveau prompt avec une variable fixée.
+    On peut donc construire des chaînes spécialisées sans dupliquer le template.
+    """
+    model = get_model().with_structured_output(Explanation)
+    return EXPLAIN_PROMPT.partial(level=level) | model
+
+
+# Trois chaînes spécialisées, un seul template
+beginner_chain     = explain_chain_for_level("débutant")
+intermediate_chain = explain_chain_for_level("intermédiaire")
+advanced_chain     = explain_chain_for_level("avancé")
+
+# Chaque chaîne n'attend plus que {concept}
+result = intermediate_chain.invoke({"concept": "les générateurs Python"})
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — Qu'est-ce qu'un \texttt{Runnable}}
+
+LCEL repose sur une \textbf{interface unique} : tout objet manipulable est
+un \texttt{Runnable}. Cette interface garantit~:
+
+\begin{itemize}[leftmargin=*]
+  \item \texttt{.invoke(input)} — exécution synchrone, un input.
+  \item \texttt{.batch([inputs])} — exécution synchrone, plusieurs inputs.
+  \item \texttt{.stream(input)} — itérateur, pour le streaming.
+  \item \texttt{.ainvoke}, \texttt{.abatch}, \texttt{.astream} — versions
+        asynchrones.
+\end{itemize}
+
+\texttt{ChatPromptTemplate}, un modèle, un parseur, un schéma — tous sont
+des \texttt{Runnable}. C'est ce qui permet de les composer librement.
+
+\begin{quote}\itshape
+\textbf{Un seul protocole pour tout.} C'est l'innovation de LCEL par
+rapport aux versions antérieures de LangChain~: au lieu d'avoir des
+\texttt{LLMChain}, \texttt{SequentialChain}, \texttt{RouterChain},
+\dots, il n'y a qu'\textbf{un} type composable. Le code applicatif n'a plus
+à connaître qu'un seul vocabulaire.
+\end{quote}
+
+\subsubsection*{Étape 2 — Le \texttt{|} comme sucre syntaxique}
+
+\texttt{a | b} appelle \texttt{a.\_\_or\_\_(b)}, méthode définie sur la
+classe de base \texttt{Runnable}. Elle retourne une instance de
+\texttt{RunnableSequence(a, b)}. Mentalement, la transformation est~:
+
+\begin{center}
+\begin{tikzpicture}[node distance=4mm and 6mm,
+                    every node/.style={font=\small\ttfamily}]
+  \node (left) {prompt | model};
+  \node[right=of left, font=\Large] (eq) {$\equiv$};
+  \node[right=of eq] (right) {RunnableSequence(prompt, model)};
+\end{tikzpicture}
+\end{center}
+
+Et \texttt{a | b | c} compose en chaîne (associatif à gauche) — équivalent
+à \texttt{RunnableSequence(a, b, c)}. Quand on \texttt{.invoke(x)} le
+résultat, LCEL fait \texttt{c.invoke(b.invoke(a.invoke(x)))}.
+
+\subsubsection*{Étape 3 — Le contrat de types entre maillons}
+
+\begin{center}
+\begin{tikzpicture}[node distance=4mm and 14mm]
+  \node[block] (a) {prompt};
+  \node[block, right=of a] (b) {model};
+  \node[data,  above=of a, font=\scriptsize\ttfamily] (in)  {dict\\\{level, concept\}};
+  \node[data,  above=of b, font=\scriptsize\ttfamily] (mid) {ChatPromptValue};
+  \node[data,  right=of b, font=\scriptsize\ttfamily] (out) {Explanation\\(BaseModel)};
+
+  \draw[flow] (in)  -- (a);
+  \draw[flow] (a)   -- (mid);
+  \draw[flow] (mid) -- (b);
+  \draw[flow] (b)   -- (out);
+\end{tikzpicture}
+\end{center}
+
+La sortie d'un maillon doit être acceptable par le suivant. Le modèle
+accepte indifféremment un \texttt{ChatPromptValue}, une liste de messages
+ou un string — c'est ce qui fait que \texttt{prompt | model} marche
+naturellement.
+
+\begin{quote}\itshape
+Le \texttt{|} ne vérifie pas les types à la composition. Un mauvais
+chaînage (par exemple \texttt{model | prompt}) ne plantera qu'au
+\texttt{.invoke()}, avec une erreur souvent obscure. Compose toujours dans
+l'ordre \emph{entrée $\to$ traitement $\to$ sortie}.
+\end{quote}
+
+\subsubsection*{Étape 4 — \texttt{.partial()} : la fonction partielle des prompts}
+
+Un \texttt{ChatPromptTemplate} qui attend deux variables \texttt{\{level\}}
+et \texttt{\{concept\}} ressemble à une fonction Python \texttt{f(level,
+concept)}. \texttt{partial(level="débutant")} produit une nouvelle
+fonction \texttt{g(concept)} où \texttt{level} est figé.
+
+\begin{pythoncode}
+# Le prompt d'origine attend les deux variables.
+EXPLAIN_PROMPT.input_variables
+# >>> ['level', 'concept']
+
+beginner_prompt = EXPLAIN_PROMPT.partial(level="débutant")
+beginner_prompt.input_variables
+# >>> ['concept']
+
+# On peut désormais invoquer en ne passant que {concept}.
+beginner_prompt.invoke({"concept": "lambda"})
+\end{pythoncode}
+
+\begin{quote}\itshape
+\texttt{.partial()} \textbf{ne mute pas} le prompt original. C'est une
+opération \emph{pure} qui renvoie une nouvelle instance. Tu peux donc
+appeler \texttt{EXPLAIN\_PROMPT.partial(\dots)} cent fois sans casser le
+template de référence.
+\end{quote}
+
+\subsubsection*{Étape 5 — Le pattern \emph{fabrique}}
+
+\texttt{explain\_chain\_for\_level(level)} est une \textbf{fabrique de
+chaînes}~: on l'appelle avec un paramètre, elle nous renvoie un
+\texttt{Runnable} prêt à l'emploi, déjà configuré.
+
+\begin{center}
+\begin{tikzpicture}[node distance=5mm and 14mm]
+  \node[block]                  (f) {explain\_chain\_for\_level(level)};
+  \node[block, right=of f]      (c1) {beginner\_chain\\\scriptsize (level figé)};
+  \node[block, below=of c1]     (c2) {intermediate\_chain};
+  \node[block, below=of c2]     (c3) {advanced\_chain};
+
+  \draw[flow] (f) -- (c1) node[label, midway, above]{level="débutant"};
+  \draw[flow] (f) -- (c2) node[label, midway, above]{level="intermédiaire"};
+  \draw[flow] (f) -- (c3) node[label, midway, above]{level="avancé"};
+\end{tikzpicture}
+\end{center}
+
+Avantages~:
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Pas de duplication} du prompt (un seul source de vérité).
+  \item \textbf{Spécialisation à la construction}, pas à l'appel. Une fois
+        construite, la chaîne ne demande plus le niveau à chaque
+        \texttt{invoke}.
+  \item \textbf{Composabilité conservée}~: les chaînes spécialisées
+        peuvent être passées à un \texttt{RunnableBranch}, un
+        \texttt{RunnableParallel}, etc.
+\end{itemize}
+
+\begin{quote}\itshape
+On vient de remplacer trois fonctions différentes ou trois copies du
+prompt par \textbf{une fabrique paramétrée}. C'est l'esprit LCEL~:
+construire dynamiquement des graphes d'exécution à partir de briques
+primitives, plutôt que d'écrire du code impératif.
+\end{quote}
+
+\subsection{Vérification dans LangSmith}
+
+\subsubsection*{Que vois-tu dans l'arbre}
+
+Chaque chaîne produite par la fabrique est un \texttt{RunnableSequence}.
+Quand tu \texttt{invoke} \texttt{beginner\_chain}, LangSmith trace~:
+
+\begin{center}
+\begin{tikzpicture}[every node/.style={font=\footnotesize\ttfamily, anchor=west}]
+  \node                              (a) {RunnableSequence (beginner\_chain)};
+  \node[below=1mm of a, xshift=4mm]  (b) {ChatPromptTemplate};
+  \node[below=1mm of b, xshift=4mm]  (c) {  Input  : \{concept: "lambda"\}};
+  \node[below=1mm of c]              (d) {  Output : SystemMessage("\dots Niveau : débutant\dots")};
+  \node[below=1mm of d, xshift=-4mm] (e) {ChatAnthropic (structured\_output=Explanation)};
+\end{tikzpicture}
+\end{center}
+
+Le \texttt{level} \textbf{n'apparaît plus dans l'input} du run — il a été
+absorbé par le \texttt{.partial()}. C'est la preuve visuelle que le
+figement est bien effectif.
+
+\subsubsection*{Les trois choses à regarder}
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Le \emph{type} du run racine}~: \texttt{RunnableSequence}.
+        C'est la matérialisation du \texttt{|}.
+  \item \textbf{L'input du \texttt{ChatPromptTemplate}}~: seulement la (ou
+        les) variable(s) non figée(s). Si tu y vois encore \texttt{level},
+        c'est que ton \texttt{.partial()} n'a pas été pris en compte.
+  \item \textbf{L'output du \texttt{ChatPromptTemplate}}~: les messages
+        complets avec \texttt{level} \emph{déjà remplacé}. La substitution
+        a eu lieu à la construction du template, pas dans le modèle.
+\end{enumerate}
+
+\begin{quote}\itshape
+Le tracing LangSmith permet de \emph{voir} la différence entre
+« variable figée par \texttt{.partial()} » et « variable passée à
+\texttt{.invoke()} »~: la première est invisible dans l'input du run, la
+seconde est visible. C'est utile pour déboguer les chaînes paramétrées.
+\end{quote}
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item LCEL repose sur \textbf{une seule interface}~: \texttt{Runnable}.
+        Tout objet manipulable (prompt, modèle, parseur, branch, parallel,
+        \dots) implémente \texttt{.invoke}, \texttt{.batch},
+        \texttt{.stream}, et leurs versions async.
+  \item \texttt{a | b} crée un \texttt{RunnableSequence(a, b)}. C'est
+        purement du sucre syntaxique sur la méthode
+        \texttt{Runnable.\_\_or\_\_}.
+  \item \texttt{ChatPromptTemplate.partial(\dots)} fige une ou plusieurs
+        variables sans muter le template original. La chaîne produite
+        n'attend plus que les variables restantes.
+  \item \textbf{Pattern fabrique}~: une fonction \texttt{build\_xxx(\dots)}
+        qui renvoie un \texttt{Runnable} paramétré est la manière idiomatique
+        de spécialiser à la construction plutôt qu'à l'appel.
+  \item Dans LangSmith, le \texttt{|} apparaît comme un nœud
+        \texttt{RunnableSequence} ; \texttt{.partial()} se voit à
+        l'\emph{absence} de la variable figée dans l'input du run.
+\end{enumerate}
+\par}
+
+% #####################################################################
+% #####################################################################
+\section{\texttt{RunnableParallel} : exécuter plusieurs chaînes en concurrence}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice 4. \texttt{RunnableParallel}]
+On veut générer \textbf{deux versions} d'une même explication~: une pour
+les débutants, une pour les intermédiaires. Les deux explications sont
+\textbf{indépendantes} l'une de l'autre (aucune n'a besoin du résultat de
+l'autre).
+
+\textbf{Contrainte de performance}~: chaque appel au LLM prend
+$\sim$1 à 2 secondes. En exécution séquentielle, on attendrait
+$\sim$2 à 4 secondes au total. On veut \textbf{ne payer que la latence
+d'un seul appel}, soit $\sim$1 à 2 secondes — et un seul \texttt{invoke}
+côté code applicatif.
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Comprendre comment LCEL \emph{parallélise} des chaînes indépendantes
+        avec \texttt{RunnableParallel}.
+  \item Quantifier le gain de latence par rapport à une boucle séquentielle.
+  \item Distinguer \texttt{RunnableParallel} de
+        \texttt{RunnablePassthrough.assign} (qui paraît proche mais a une
+        sémantique différente).
+  \item Repérer la structure « en éventail » dans LangSmith.
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\subsubsection*{Vue d'ensemble}
+
+\begin{center}
+\begin{tikzpicture}
+  \node[data] (in) {\{"concept": "générateurs"\}};
+  \node[parallel, below=of in] (par) {RunnableParallel\\\texttt{beginner=\dots, intermediate=\dots}};
+
+  \node[llm, below left=12mm and 4mm of par]   (a) {beginner\_chain\\\scriptsize (level="débutant")};
+  \node[llm, below right=12mm and 4mm of par]  (b) {intermediate\_chain\\\scriptsize (level="intermédiaire")};
+
+  \node[data, below=22mm of par] (out)
+       {\{"beginner": Explanation(\dots),\\\ "intermediate": Explanation(\dots)\}};
+
+  \draw[flowdata] (in)  -- (par);
+  \draw[flow]     (par) -- (a) node[label, midway, sloped, above]{en parallèle};
+  \draw[flow]     (par) -- (b) node[label, midway, sloped, above]{en parallèle};
+  \draw[flow]     (a)   -- (out);
+  \draw[flow]     (b)   -- (out);
+\end{tikzpicture}
+\end{center}
+
+\texttt{RunnableParallel} duplique l'input vers chaque branche, lance toutes
+les branches \textbf{en concurrence}, attend que toutes terminent, et
+retourne un \textbf{dict} dont les clés sont les noms de branches.
+
+\subsubsection*{Diagramme temporel : séquentiel vs parallèle}
+
+\begin{center}
+\begin{tikzpicture}[node distance=3mm and 6mm]
+  % Axe séquentiel
+  \draw[timearrow] (0,0) -- (10,0) node[right]{\small temps};
+  \node[left] at (-0.2, 0.6) {\scriptsize séquentiel};
+  \node[bar, anchor=west, minimum width=20mm] (s1) at (0, 0.6) {beginner};
+  \node[bar, anchor=west, minimum width=22mm, fill=orange!30] (s2) at (2, 0.6) {intermediate};
+
+  \draw[decorate, decoration={brace, amplitude=2mm}]
+       (0, 1.2) -- (4.2, 1.2) node[midway, above, yshift=2mm]{\scriptsize $\sim$4 s};
+
+  % Axe parallèle
+  \draw[timearrow] (0,-2) -- (10,-2);
+  \node[left] at (-0.2, -1.4) {\scriptsize parallèle};
+  \node[bar, anchor=west, minimum width=20mm] (p1) at (0, -1.4) {beginner};
+  \node[bar, anchor=west, minimum width=22mm, fill=orange!30] (p2) at (0, -1.95) {intermediate};
+
+  \draw[decorate, decoration={brace, amplitude=2mm}]
+       (0, -1.0) -- (2.2, -1.0) node[midway, above, yshift=2mm]{\scriptsize $\sim$2 s};
+\end{tikzpicture}
+\end{center}
+
+Le gain est d'autant plus marqué qu'on a de branches~: 3 chaînes en
+parallèle restent à la latence d'\emph{une} seule chaîne (modulo le
+plafond de \emph{rate limiting} du fournisseur).
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+from langchain_core.runnables import RunnableParallel
+
+def explain_chain_for_level(level: str):
+    model = get_model().with_structured_output(Explanation)
+    return EXPLAIN_PROMPT.partial(level=level) | model
+
+
+def build_multi_level_chain():
+    """Génère les versions débutant ET intermédiaire en un seul invoke."""
+    return RunnableParallel(
+        beginner=explain_chain_for_level("débutant"),
+        intermediate=explain_chain_for_level("intermédiaire"),
+    )
+
+
+# Utilisation
+multi = build_multi_level_chain()
+results = multi.invoke({"concept": "les générateurs Python"})
+
+# results est un dict.
+# Les deux appels LLM ont été lancés en concurrence ; on n'a payé
+# que la latence du plus lent.
+print(results["beginner"].intuition)
+print(results["intermediate"].intuition)
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — Le contrat de \texttt{RunnableParallel}}
+
+\texttt{RunnableParallel} prend un \textbf{ensemble de} \texttt{Runnable}
+\textbf{nommés}, généralement passés en kwargs~:
+
+\begin{pythoncode}
+RunnableParallel(
+    beginner=chain_a,
+    intermediate=chain_b,
+    advanced=chain_c,
+)
+\end{pythoncode}
+
+À l'invocation~:
+
+\begin{enumerate}[leftmargin=*]
+  \item L'input \texttt{x} est \textbf{dupliqué} vers chaque branche.
+  \item Toutes les branches s'exécutent en parallèle (via le pool de
+        threads pour les chaînes synchrones, via l'event loop asyncio
+        pour les chaînes async).
+  \item LCEL attend que \textbf{toutes} terminent.
+  \item La sortie est un dict \texttt{\{nom\_branche: résultat\}}.
+\end{enumerate}
+
+\begin{quote}\itshape
+\textbf{Un seul input, plusieurs sorties.} C'est le pattern « éventail »~:
+on prend une question, on en demande plusieurs angles, et chaque branche
+travaille sur sa version.
+\end{quote}
+
+\subsubsection*{Étape 2 — Le gain de latence n'est pas le gain de \emph{débit}}
+
+Un appel LLM passe la quasi-totalité du temps à \textbf{attendre} la
+réponse du serveur. Sur le client, le thread est endormi. Lancer deux
+appels en parallèle ne consomme donc pas deux fois plus de CPU local~: ça
+consomme deux \emph{tickets} chez le fournisseur en même temps.
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Mesure} & \textbf{Séquentiel} & \textbf{Parallèle (2 branches)} \\
+\midrule
+Latence totale & $T_1 + T_2$        & $\max(T_1, T_2)$ \\
+Tokens consommés & $N_1 + N_2$      & $N_1 + N_2$ \\
+Coût \$         & idem               & idem \\
+CPU client      & 1 thread occupé   & 2 threads endormis sur I/O \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{quote}\itshape
+La parallélisation \textbf{ne réduit pas la facture}~: tu paies toujours
+chaque token. Elle réduit uniquement la \emph{latence perçue} par
+l'utilisateur. Pour un usage UI où le temps de réponse compte, c'est
+décisif. Pour un job batch nocturne, le gain est nul (et tu risques
+juste de saturer plus vite ton \emph{rate limit}).
+\end{quote}
+
+\subsubsection*{Étape 3 — Le sucre syntaxique dict}
+
+\texttt{RunnableParallel} a deux formes équivalentes~:
+
+\begin{pythoncode}
+# Forme explicite
+chain = RunnableParallel(beginner=a, intermediate=b)
+
+# Forme dict (utile pour des noms non-identifieurs, ex. avec espaces)
+chain = RunnableParallel({"beginner": a, "intermediate": b})
+\end{pythoncode}
+
+Et LCEL accepte même un \textbf{dict nu} dans une composition par
+\texttt{|}~: il sera implicitement converti en \texttt{RunnableParallel}.
+
+\begin{pythoncode}
+chain = some_prompt | {"answer": chain_a, "summary": chain_b}
+# strictement équivalent à
+chain = some_prompt | RunnableParallel(answer=chain_a, summary=chain_b)
+\end{pythoncode}
+
+\begin{quote}\itshape
+Le \textbf{dict implicite} dans une chaîne LCEL signifie toujours
+\texttt{RunnableParallel}. Quand tu vois \texttt{\{ "x": f, "y": g \}} dans
+un \texttt{|}, lis « éventail vers f et g, sortie nommée ».
+\end{quote}
+
+\subsubsection*{Étape 4 — \texttt{RunnableParallel} vs \texttt{RunnablePassthrough.assign}}
+
+Ces deux primitives se ressemblent, mais l'\emph{intention} diffère~:
+
+\begin{center}
+\begin{tabular}{p{6.5cm} p{6.5cm}}
+\toprule
+\textbf{\texttt{RunnableParallel}} & \textbf{\texttt{RunnablePassthrough.assign}} \\
+\midrule
+Renvoie un \textbf{nouveau dict} contenant uniquement les clés des branches.
+& \textbf{Enrichit} l'input existant~: garde toutes les clés d'entrée \emph{et} ajoute les nouvelles.
+\\[1mm]
+Sortie : \texttt{\{nom1: \dots, nom2: \dots\}} (les inputs disparaissent).
+& Sortie : \texttt{\{**input, nom1: \dots, nom2: \dots\}} (inputs préservés).
+\\[1mm]
+Usage typique~: fan-out final (l'utilisateur veut \emph{le résultat}).
+& Usage typique~: ajout d'un champ calculé à mi-pipeline.
+\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{quote}\itshape
+Si tu utilises \texttt{RunnableParallel} à la place de
+\texttt{.assign(\dots)} dans un pipeline, l'\texttt{input} d'origine
+\textbf{disparaît} dans la sortie. Les maillons suivants qui s'attendaient
+à lire la clé \texttt{concept} ne la trouveront plus. C'est l'un des bugs
+LCEL les plus fréquents.
+\end{quote}
+
+\subsubsection*{Étape 5 — Limites et bonnes pratiques}
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Rate limits}~: chaque branche compte. 5 branches en
+        parallèle, c'est 5 appels simultanés chez le fournisseur — vérifie
+        que tu ne dépasses pas le RPM (\emph{requests per minute}) de ton
+        compte.
+  \item \textbf{Erreur partielle}~: si une branche échoue, par défaut tout
+        échoue. Pour tolérer les erreurs partielles, enveloppe chaque
+        branche dans \texttt{.with\_fallbacks([\dots])}.
+  \item \textbf{Branches indépendantes uniquement}~: si la branche B a
+        besoin du résultat de la branche A, ce n'est pas du parallèle —
+        c'est une séquence, à composer avec \texttt{|} et \texttt{.assign}.
+\end{itemize}
+
+\subsubsection{Exécution et observation}
+
+\subsubsection*{Le code de l'exécuteur}
+
+\begin{pythoncode}
+import time
+
+multi = build_multi_level_chain()
+
+t0 = time.perf_counter()
+results = multi.invoke({"concept": "les générateurs Python"})
+elapsed = time.perf_counter() - t0
+
+print(f"Durée RunnableParallel : {elapsed:.2f} s")
+
+# Pour comparaison, version séquentielle
+t0 = time.perf_counter()
+r1 = explain_chain_for_level("débutant").invoke({"concept": "les générateurs Python"})
+r2 = explain_chain_for_level("intermédiaire").invoke({"concept": "les générateurs Python"})
+elapsed_seq = time.perf_counter() - t0
+
+print(f"Durée séquentielle : {elapsed_seq:.2f} s")
+print(f"Speedup : x{elapsed_seq / elapsed:.2f}")
+\end{pythoncode}
+
+Typiquement, on observe un speedup proche de $\times 1.8$ à $\times 2.0$
+pour deux branches (le facteur 2 théorique étant légèrement entamé par
+l'overhead de \emph{threading} et les variations de latence côté
+fournisseur).
+
+\subsection{Vérification dans LangSmith}
+
+\subsubsection*{L'arbre d'exécution attendu}
+
+\begin{center}
+\begin{tikzpicture}[every node/.style={font=\footnotesize\ttfamily, anchor=west}]
+  \node                              (a) {RunnableParallel<beginner, intermediate>};
+  \node[below=1mm of a, xshift=4mm]  (b) {[beginner] RunnableSequence};
+  \node[below=1mm of b, xshift=4mm]  (c) {  ChatPromptTemplate};
+  \node[below=1mm of c]              (d) {  ChatAnthropic (structured\_output) ← LLM \#1};
+  \node[below=1mm of d, xshift=-4mm] (e) {[intermediate] RunnableSequence};
+  \node[below=1mm of e, xshift=4mm]  (f) {  ChatPromptTemplate};
+  \node[below=1mm of f]              (g) {  ChatAnthropic (structured\_output) ← LLM \#2};
+\end{tikzpicture}
+\end{center}
+
+Les deux sous-séquences sont des \textbf{frères} sous le même
+\texttt{RunnableParallel}. LangSmith affiche un \emph{timeline} où l'on
+voit clairement les deux barres se chevaucher temporellement.
+
+\subsubsection*{Les quatre choses à regarder}
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Timeline en haut du run racine}~: deux barres parallèles.
+        Si les barres sont en \emph{série} (l'une après l'autre), c'est
+        que \texttt{RunnableParallel} n'a pas été utilisé correctement
+        (par exemple, tu as fait deux \texttt{invoke} séparés dans une
+        boucle).
+  \item \textbf{Input des deux branches}~: identique. C'est la duplication
+        de l'input qu'on a évoquée.
+  \item \textbf{Output du run racine}~: un dict avec les clés
+        \texttt{beginner} et \texttt{intermediate}. Aucune autre clé.
+  \item \textbf{Onglet \emph{Costs}}~: les tokens et le \$ s'additionnent
+        entre branches — la parallélisation ne change rien à la facture.
+\end{enumerate}
+
+\begin{quote}\itshape
+Lancer deux appels LLM en parallèle dans LangChain, c'est littéralement
+\textbf{ajouter un mot}~: \texttt{RunnableParallel}. Pas de threads à
+gérer, pas d'\texttt{asyncio.gather}, pas de pool. Le runtime LCEL fait
+tout, et le tracing LangSmith te montre la concurrence à l'œil nu.
+\end{quote}
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item \texttt{RunnableParallel(nom1=chain1, nom2=chain2, \dots)} duplique
+        l'input vers chaque branche, exécute toutes les branches en
+        \textbf{concurrence}, et renvoie un \textbf{dict} de résultats.
+  \item Latence~: $\max(T_i)$ au lieu de $\sum T_i$. Coût en tokens
+        \textbf{inchangé}. C'est un gain de latence, pas un gain de débit.
+  \item \texttt{prompt | \{"a": chain\_a, "b": chain\_b\}} est du sucre
+        syntaxique~: le dict est implicitement converti en
+        \texttt{RunnableParallel}.
+  \item \textbf{Ne pas confondre} avec \texttt{RunnablePassthrough.assign}~:
+        \texttt{Parallel} remplace l'input, \texttt{.assign} l'enrichit.
+  \item Dans LangSmith, la concurrence se voit immédiatement~: deux barres
+        de timeline qui se chevauchent sous le même nœud parent.
+\end{enumerate}
+\par}
+
+% #####################################################################
+% #####################################################################
+\section{Streaming token par token avec \texttt{.stream()}}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice 5. Streaming token par token]
+L'utilisateur pose une question au tuteur Python. Plutôt que d'attendre
+\emph{toute} la réponse (souvent 2 à 5 secondes), on veut afficher la
+réponse \textbf{au fur et à mesure} qu'elle est générée, comme dans
+ChatGPT~: le premier mot apparaît au bout de $\sim$300 ms, puis les
+suivants s'écrivent en temps réel.
+
+\textbf{Contrainte}~: rester un \texttt{Runnable} LCEL classique, et
+afficher token par token dans le terminal, sans buffering perturbateur.
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Comprendre la différence entre \texttt{.invoke()} (réponse unique)
+        et \texttt{.stream()} (itérateur de morceaux).
+  \item Savoir construire une chaîne \emph{streamable} et l'afficher au fil
+        de l'eau dans un terminal ou une UI.
+  \item Comprendre pourquoi \texttt{with\_structured\_output} \emph{ne
+        streame pas bien} et quand basculer sur \texttt{StrOutputParser}.
+  \item Connaître les pièges classiques du streaming (buffering, flush,
+        retour chariot).
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\subsubsection*{Vue d'ensemble}
+
+\begin{center}
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}
+  \node[data]               (in)     {\{"concept": "le GIL"\}};
+  \node[block, below=of in] (prompt) {ChatPromptTemplate};
+  \node[llm,   below=of prompt] (model) {Modèle de chat};
+  \node[block, below=of model] (parser) {StrOutputParser};
+
+  \node[token, right=22mm of model, yshift=4mm]   (t1) {"Le"};
+  \node[token, right=of t1]   (t2) {" GIL"};
+  \node[token, right=of t2]   (t3) {" est"};
+  \node[token, right=of t3]   (t4) {" un"};
+  \node[token, right=of t4]   (t5) {"\dots"};
+
+  \draw[flowdata] (in)     -- (prompt);
+  \draw[flow]     (prompt) -- (model);
+  \draw[flow]     (model)  -- (parser);
+  \draw[flow]     (model.east) -- ++(0.5,0)  node[label, above]{streaming};
+  \draw[->, thick, draw=teal!60!black] (model.east) ..controls +(1,0.5).. (t1.west);
+
+  \node[font=\footnotesize\itshape, below=12mm of parser]
+       (out) {pour chunk in chain.stream(\dots): print(chunk, end="", flush=True)};
+\end{tikzpicture}%
+}
+\end{center}
+
+L'API du modèle ouvre une connexion \emph{server-sent events} avec le
+fournisseur. Chaque token reçu est immédiatement émis par la chaîne. Tant
+qu'on consomme l'itérateur, les tokens arrivent.
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from config import get_model
+
+STREAM_PROMPT = ChatPromptTemplate.from_messages([
+    ("system", "Tu es un assistant pédagogique Python concis et précis."),
+    ("human",  "Explique en 2 paragraphes : {concept}"),
+])
+
+
+def build_streaming_chain():
+    """Chaîne texte simple, idéale pour du streaming dans un terminal/UI."""
+    return STREAM_PROMPT | get_model() | StrOutputParser()
+
+
+# Utilisation
+streamer = build_streaming_chain()
+for chunk in streamer.stream({"concept": "le GIL en Python"}):
+    print(chunk, end="", flush=True)
+print()  # saut de ligne final
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — \texttt{.invoke()} vs \texttt{.stream()}}
+
+\begin{center}
+\begin{tabular}{p{6.5cm} p{6.5cm}}
+\toprule
+\textbf{\texttt{.invoke(input)}} & \textbf{\texttt{.stream(input)}} \\
+\midrule
+Renvoie une valeur unique~: la réponse complète. & Renvoie un \emph{itérateur} de morceaux (\texttt{chunks}). \\
+Le code attend que tout soit prêt avant de continuer. & Le code itère et reçoit les morceaux dès qu'ils arrivent. \\
+Latence perçue = latence totale. & Latence perçue = latence du \emph{premier} token (~300 ms). \\
+Bien pour batch, scripts, données structurées. & Bien pour UI temps réel, terminal interactif. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{quote}\itshape
+Le \textbf{time-to-first-token (TTFT)} est ce qui rend une interface
+« vivante ». Même si la durée totale est identique, voir la réponse
+\textbf{commencer} à apparaître au bout de 300 ms change radicalement la
+sensation d'attente.
+\end{quote}
+
+\subsubsection*{Étape 2 — Pourquoi \texttt{StrOutputParser} ?}
+
+Par défaut, un modèle de chat renvoie des \texttt{AIMessageChunk} (des
+fragments d'\texttt{AIMessage}). En streaming, on ne veut pas avoir à
+faire \texttt{chunk.content} dans la boucle d'affichage — on veut
+directement le \emph{texte}. C'est exactement le rôle de
+\texttt{StrOutputParser}~:
+
+\begin{center}
+\begin{tabular}{ll}
+Entrée & Sortie \\
+\midrule
+\texttt{AIMessageChunk(content="Le")}  & \texttt{"Le"} \\
+\texttt{AIMessageChunk(content=" GIL")} & \texttt{" GIL"} \\
+\dots & \dots \\
+\end{tabular}
+\end{center}
+
+\begin{pythoncode}
+# Sans StrOutputParser
+for chunk in (STREAM_PROMPT | get_model()).stream({"concept": "X"}):
+    print(chunk.content, end="", flush=True)  # accès manuel à .content
+
+# Avec StrOutputParser
+for chunk in (STREAM_PROMPT | get_model() | StrOutputParser()).stream({"concept": "X"}):
+    print(chunk, end="", flush=True)  # le chunk EST une str
+\end{pythoncode}
+
+\subsubsection*{Étape 3 — Pourquoi \texttt{with\_structured\_output} streame mal}
+
+\begin{center}
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[node distance=4mm and 8mm]
+  \node[block]                          (a) {Schéma Pydantic};
+  \node[llm,   right=of a]              (b) {LLM (tool-calling)};
+  \node[block, right=of b]              (c) {Désérialisation\\Pydantic};
+  \node[data,  right=of c, fill=red!10] (d) {Objet \emph{valide} ?};
+
+  \draw[flow] (a) -- (b);
+  \draw[flow] (b) -- (c) node[label, midway, above]{JSON partiel};
+  \draw[flow] (c) -- (d) node[label, midway, above]{?};
+\end{tikzpicture}%
+}
+\end{center}
+
+Un schéma Pydantic est \textbf{tout ou rien}~: tant que tous les champs
+requis ne sont pas remplis, l'objet ne peut pas être validé. Le modèle
+peut bien streamer le JSON token par token, on ne peut pas
+\emph{désérialiser} en cours de route — la moitié des champs manquent.
+
+\begin{quote}\itshape
+Appeler \texttt{.stream()} sur une chaîne \texttt{with\_structured\_output}
+ne plantera \emph{pas}, mais souvent la chaîne accumule tout en interne et
+n'émet qu'\textbf{un seul gros chunk} à la fin. Le bénéfice du streaming
+disparaît. Pour un streaming réel, soit on accepte du texte
+(\texttt{StrOutputParser}), soit on utilise des techniques avancées
+(parsing JSON incrémental, mais c'est une autre histoire).
+\end{quote}
+
+\subsubsection*{Étape 4 — La boucle d'affichage côté Python}
+
+\begin{pythoncode}
+for chunk in streamer.stream({"concept": "le GIL en Python"}):
+    print(chunk, end="", flush=True)
+print()
+\end{pythoncode}
+
+Trois détails subtils mais importants~:
+
+\begin{itemize}[leftmargin=*]
+  \item \texttt{end=""}~: empêche \texttt{print} d'ajouter un \texttt{\textbackslash n} après
+        chaque chunk. Sans ça, chaque token est affiché sur sa propre
+        ligne — illisible.
+  \item \texttt{flush=True}~: force l'écriture sur le terminal
+        \textbf{immédiatement}. Python bufferise stdout par défaut (par
+        bloc de 4 ko ou par ligne) ; sans flush, on voit la réponse arriver
+        par paquets, pas par tokens.
+  \item Le \texttt{print()} final est juste là pour le saut de ligne après
+        toute la réponse.
+\end{itemize}
+
+\begin{quote}\itshape
+\textbf{\texttt{flush=True} est le secret du streaming visible.} Si tu
+oublies, tu as l'impression que ton streaming ne marche pas — alors qu'il
+marche, mais c'est le terminal qui retient les caractères. C'est la
+question \#1 posée en debug.
+\end{quote}
+
+\subsubsection*{Étape 5 — Cas async : \texttt{.astream()}}
+
+Pour une UI web ou un endpoint FastAPI, on veut la version asynchrone~:
+
+\begin{pythoncode}
+async def stream_to_websocket(websocket, concept: str):
+    async for chunk in streamer.astream({"concept": concept}):
+        await websocket.send_text(chunk)
+\end{pythoncode}
+
+La sémantique est identique à \texttt{.stream()}, mais on utilise
+\texttt{async for} et chaque \texttt{await} libère l'event loop pour les
+autres connexions. C'est le pattern à connaître pour servir N clients
+simultanément.
+
+\subsection{Vérification dans LangSmith}
+
+\subsubsection*{L'arbre d'exécution attendu}
+
+\begin{center}
+\begin{tikzpicture}[every node/.style={font=\footnotesize\ttfamily, anchor=west}]
+  \node                              (a) {RunnableSequence};
+  \node[below=1mm of a, xshift=4mm]  (b) {ChatPromptTemplate};
+  \node[below=1mm of b, xshift=0mm]  (c) {ChatAnthropic  (streaming=True)};
+  \node[below=1mm of c, xshift=4mm]  (d) {  Tokens : "Le", " GIL", " est", " un", ...};
+  \node[below=1mm of d, xshift=-4mm] (e) {StrOutputParser};
+\end{tikzpicture}
+\end{center}
+
+LangSmith reconstitue la réponse complète à la fin et l'affiche dans
+l'onglet \emph{Output}, mais conserve la durée \emph{end-to-end} et le
+\emph{TTFT} dans les métriques.
+
+\subsubsection*{Les trois choses à regarder}
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Métrique \emph{Time to first token}}~: temps entre l'appel
+        et le premier token reçu. C'est la métrique qui détermine la
+        \emph{sensation de vivacité} de ton UI. Souvent affichée sous
+        \texttt{ttft\_ms} dans les détails du run.
+  \item \textbf{Onglet \emph{Output} du nœud \texttt{ChatAnthropic}}~:
+        l'\texttt{AIMessage} reconstitué (LangSmith concatène les chunks
+        pour l'affichage). Tu ne vois \emph{pas} chaque token séparément
+        dans l'UI, mais la trace HTTP sous-jacente est bien du streaming.
+  \item \textbf{Type du modèle dans la trace}~:
+        \texttt{streaming=True} ou un flag équivalent. Si tu vois
+        \texttt{streaming=False}, ton appel est en mode bloquant.
+\end{enumerate}
+
+\begin{quote}\itshape
+Compare deux runs côte à côte~: l'un avec \texttt{.invoke}, l'autre avec
+\texttt{.stream}, sur le même prompt. Le total de tokens et le coût \$
+sont identiques. Mais le run streamé a un TTFT $\sim$10$\times$ plus
+court. C'est, mesurée, la valeur ajoutée du streaming.
+\end{quote}
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item \texttt{chain.stream(input)} renvoie un \textbf{itérateur} de
+        morceaux ; \texttt{chain.invoke(input)} renvoie la réponse
+        complète. Même chaîne, deux modes de consommation.
+  \item Pour streamer du texte, terminer la chaîne par
+        \texttt{StrOutputParser} pour que chaque morceau soit déjà une
+        \texttt{str} (et pas un \texttt{AIMessageChunk}).
+  \item \texttt{with\_structured\_output} ne streame pas \emph{vraiment}~:
+        un schéma est tout-ou-rien, on ne peut pas désérialiser un objet
+        partiel. Pour du streaming réel, accepter du texte.
+  \item Dans la boucle d'affichage~: \texttt{print(chunk, end="",
+        flush=True)}. Sans \texttt{flush=True}, les buffers du terminal
+        masquent l'effet streaming.
+  \item Pour le web ou les apps async, utiliser \texttt{.astream()} avec
+        \texttt{async for}. Sémantique identique, mais l'event loop reste
+        libre pour les autres connexions.
+\end{enumerate}
+\par}
+
+\end{document}

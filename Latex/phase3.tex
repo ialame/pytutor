@@ -1,0 +1,1308 @@
+% =====================================================================
+% Phase 3 — L'agent PyTutor (LangChain 1.x)
+% Concepts essentiels des agents ReAct avec tools et mémoire.
+% Compilation : pdflatex -shell-escape phase3.tex (deux fois pour la TOC)
+% Pré-requis  : pygmentize (pip install Pygments) + paquet TeX "minted"
+% =====================================================================
+\documentclass[11pt,a4paper]{article}
+
+% ---------- Encodage & langue ----------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+
+% Glyphes Unicode utilisés dans le code Python copié-collé
+\DeclareUnicodeCharacter{2713}{\textbf{V}}    % ✓
+\DeclareUnicodeCharacter{2192}{$\rightarrow$} % →
+\DeclareUnicodeCharacter{2500}{-}             % ─ box drawing
+\DeclareUnicodeCharacter{276F}{>}             % ❯
+
+% ---------- Mise en page ----------
+\usepackage[a4paper,margin=2.2cm]{geometry}
+\usepackage{parskip}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!60!black,
+  urlcolor=blue!60!black,
+  citecolor=blue!60!black,
+  bookmarksopen=true,
+  bookmarksopenlevel=2,
+}
+
+% ---------- Boîtes & callouts ----------
+\usepackage[most]{tcolorbox}
+\tcbset{
+  enhanced,
+  colback=blue!3,
+  colframe=blue!50!black,
+  fonttitle=\bfseries,
+  arc=2pt, boxrule=0.6pt,
+}
+
+% ---------- Code avec minted ----------
+\usepackage{minted}
+\setminted{
+  fontsize=\small,
+  linenos=true,
+  numbersep=6pt,
+  frame=lines,
+  framesep=2mm,
+  bgcolor=gray!4,
+  breaklines=true,
+  breakanywhere=true,
+  python3=true,
+  tabsize=4,
+}
+\newminted{python}{}
+
+% ---------- TikZ ----------
+\usepackage{tikz}
+\usetikzlibrary{
+  arrows.meta, positioning, shapes.geometric, shapes.misc,
+  fit, backgrounds, calc, trees,
+  decorations.pathreplacing, decorations.markings,
+}
+
+\tikzset{
+  node distance=8mm and 12mm,
+  block/.style={
+    rectangle, rounded corners=2pt, draw=blue!60!black, fill=blue!8,
+    minimum width=42mm, minimum height=9mm, align=center, font=\small
+  },
+  data/.style={
+    rectangle, rounded corners=1pt, draw=gray!60, fill=gray!10,
+    minimum width=42mm, minimum height=8mm, align=center, font=\footnotesize\ttfamily
+  },
+  llm/.style={
+    rectangle, rounded corners=2pt, draw=red!60!black, fill=red!8,
+    minimum width=42mm, minimum height=9mm, align=center, font=\small
+  },
+  tool/.style={
+    rectangle, rounded corners=2pt, draw=teal!60!black, fill=teal!10,
+    minimum width=40mm, minimum height=9mm, align=center, font=\small
+  },
+  store/.style={
+    cylinder, shape border rotate=90, aspect=0.25,
+    draw=violet!60!black, fill=violet!10, minimum width=30mm, minimum height=12mm,
+    align=center, font=\small
+  },
+  msgblock/.style={
+    rectangle, rounded corners=1pt, draw=purple!60!black, fill=purple!6,
+    minimum width=58mm, minimum height=7mm, align=left, font=\scriptsize\ttfamily
+  },
+  flow/.style={-{Stealth[length=2.2mm]}, thick, draw=blue!60!black},
+  flowdata/.style={-{Stealth[length=2.2mm]}, thick, draw=gray!60, dashed},
+  label/.style={font=\scriptsize\itshape, fill=white, inner sep=1pt},
+}
+
+% ---------- Titre ----------
+\title{\textbf{Phase 3 — L'agent PyTutor}\\
+\large Quatre concepts essentiels~: \texttt{@tool}, \texttt{create\_agent}, boucle ReAct, mémoire conversationnelle}
+\author{Cours PyTutor2}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+Cette phase 3 construit un \emph{agent} qui orchestre les briques des
+phases précédentes via une boucle \emph{Réfléchir-Agir-Observer} (ReAct).
+On y aborde~: le décorateur \texttt{@tool} et la docstring comme
+contrat avec le LLM, la construction de l'agent avec
+\texttt{create\_agent} (LangChain 1.x), l'observation de la boucle ReAct
+sur trois démos contrastées, et la gestion de la mémoire
+conversationnelle pour un chat multi-tour. Chaque exercice suit la
+structure habituelle (énoncé + objectifs en boîte, solution détaillée,
+vérification LangSmith, récapitulatif).
+\end{abstract}
+
+\tableofcontents
+\bigskip
+
+% #####################################################################
+% #####################################################################
+\section{Définir des \emph{tools} avec \texttt{@tool}}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice 1. Quatre outils pour l'agent PyTutor]
+Implémente quatre \emph{tools} que l'agent PyTutor pourra appeler~:
+\texttt{search\_python\_docs} (recherche dans la doc Python via le RAG
+de la Phase 2), \texttt{run\_python\_code} (exécute du code en
+\texttt{subprocess}), \texttt{generate\_exercise} (utilise la chaîne
+d'explication de la Phase 1), et \texttt{check\_pep8} (lance
+\texttt{pycodestyle} sur du code).
+
+Chaque tool doit être décoré avec \texttt{@tool} de
+\texttt{langchain\_core.tools}, et sa \textbf{docstring} doit décrire
+précisément à quoi il sert et \emph{quand} l'appeler — c'est ce que le
+modèle va lire pour décider.
+
+\textbf{Contrainte}~: gérer proprement les cas d'erreur (timeout du
+subprocess, module absent, pas de résultat dans le RAG, valeur invalide
+en argument) avec des messages qui parlent au LLM.
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Maîtriser le décorateur \texttt{@tool}~: il transforme une
+        fonction Python en \emph{tool} appelable par un LLM.
+  \item Comprendre que la \textbf{docstring} est envoyée au modèle comme
+        description du tool — donc c'est du \emph{prompt engineering}
+        appliqué à du code.
+  \item Apprendre les patterns d'implémentation propres~: lazy init,
+        \texttt{tempfile} avec nettoyage, \texttt{timeout}, fallbacks
+        sur erreur.
+  \item Réutiliser les briques des Phases 1 et 2 à l'intérieur d'un tool.
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\begin{center}
+\begin{tikzpicture}[node distance=5mm and 10mm]
+  \node[llm] (model) {Modèle LLM};
+
+  \node[tool, below left=14mm and 18mm of model]  (t1)
+       {search\_python\_docs\\\scriptsize → RAG Chroma};
+  \node[tool, below=14mm of model]                (t2)
+       {run\_python\_code\\\scriptsize → subprocess};
+  \node[tool, below right=14mm and 18mm of model] (t3)
+       {generate\_exercise\\\scriptsize → chaîne LCEL};
+  \node[tool, below=of t2]                        (t4)
+       {check\_pep8\\\scriptsize → pycodestyle};
+
+  \draw[flow] (model) -- (t1) node[label, midway, sloped, above]{appel};
+  \draw[flow] (model) -- (t2);
+  \draw[flow] (model) -- (t3);
+  \draw[flow] (t2)    -- (t4);
+
+  \draw[flow, dashed, draw=gray!60]  (t1.east) ..controls +(2,0) and +(2,0).. (model.east)
+       node[label, midway, right]{résultat};
+\end{tikzpicture}
+\end{center}
+
+Le LLM voit \textbf{4 tools déclarés} dans son prompt système (généré
+par \texttt{create\_agent}). À chaque tour, il décide d'en appeler un
+(ou plusieurs) en lisant leur docstring. Le résultat de chaque appel
+retourne sous forme de \texttt{ToolMessage} dans l'historique, et le
+LLM \emph{réfléchit} à nouveau.
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+from langchain_core.tools import tool
+
+from phase1_explain import explain_chain_for_level
+from phase2_rag import build_or_load_vectorstore
+
+
+# Cache lazy : on charge le retriever une seule fois, à la première utilisation
+_retriever = None
+
+def _get_retriever():
+    global _retriever
+    if _retriever is None:
+        vs = build_or_load_vectorstore()
+        _retriever = vs.as_retriever(search_kwargs={"k": 3})
+    return _retriever
+
+
+@tool
+def search_python_docs(query: str) -> str:
+    """Recherche dans la documentation Python officielle.
+
+    À utiliser pour toute question FACTUELLE sur Python : syntaxe d'une
+    construction, comportement standard d'une fonction built-in, vocabulaire
+    technique. PAS pour générer du code ou évaluer du code de l'élève.
+
+    Args:
+        query: La question ou les mots-clés à rechercher dans la documentation.
+    """
+    docs = _get_retriever().invoke(query)
+    if not docs:
+        return "Aucun résultat dans la doc Python pour cette recherche."
+    return "\n\n---\n\n".join(
+        f"Source: {d.metadata.get('source', '?')}\n{d.page_content}"
+        for d in docs
+    )
+
+
+@tool
+def run_python_code(code: str) -> str:
+    """Exécute du code Python dans un sous-processus et renvoie stdout + stderr.
+
+    À utiliser quand :
+      - l'élève montre un code qui ne marche pas (pour voir la vraie erreur)
+      - tu veux vérifier qu'un exemple que tu vas donner fonctionne réellement
+      - tu veux mesurer la sortie d'un bout de code pour pouvoir l'expliquer
+
+    Limites : timeout 5 secondes, environnement Python standard, pas de pip.
+
+    Args:
+        code: Le code Python à exécuter, complet et autonome.
+    """
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write(code)
+        path = f.name
+    try:
+        result = subprocess.run(
+            [sys.executable, path],
+            capture_output=True, text=True, timeout=5,
+        )
+        parts = []
+        if result.stdout:
+            parts.append(f"STDOUT:\n{result.stdout}")
+        if result.stderr:
+            parts.append(f"STDERR:\n{result.stderr}")
+        parts.append(f"Exit code: {result.returncode}")
+        return "\n\n".join(parts)
+    except subprocess.TimeoutExpired:
+        return (
+            "ERREUR: timeout après 5 secondes. Le code boucle probablement "
+            "à l'infini (boucle while, récursion sans condition d'arrêt, etc.)"
+        )
+    finally:
+        Path(path).unlink(missing_ok=True)
+
+
+@tool
+def generate_exercise(topic: str, difficulty: str = "intermédiaire") -> str:
+    """Génère un exercice Python sur un concept avec ses questions de compréhension.
+
+    À utiliser quand l'élève demande explicitement de la pratique, des
+    exercices, ou pour vérifier sa compréhension d'un concept.
+
+    Args:
+        topic: Le concept Python à pratiquer (ex: "décorateurs", "list comprehensions").
+        difficulty: Le niveau visé. Valeurs valides : "débutant", "intermédiaire", "avancé".
+    """
+    if difficulty not in {"débutant", "intermédiaire", "avancé"}:
+        difficulty = "intermédiaire"
+
+    chain = explain_chain_for_level(difficulty)
+    explanation = chain.invoke({"concept": topic})
+
+    questions = "\n".join(
+        f"  Q{i}. {q.question}\n     -> Réponse attendue : {q.expected_answer}"
+        for i, q in enumerate(explanation.comprehension_questions, 1)
+    )
+    return (
+        f"Exercice sur '{topic}' (niveau {difficulty}) :\n\n"
+        f"Code de référence :\n{explanation.code_example}\n\n"
+        f"Questions :\n{questions}\n\n"
+        f"Piège classique : {explanation.pitfall}"
+    )
+
+
+@tool
+def check_pep8(code: str) -> str:
+    """Vérifie la conformité PEP 8 d'un bout de code Python.
+
+    À utiliser quand l'élève partage du code et veut savoir s'il est
+    propre, ou quand tu donnes un exemple que tu veux valider stylistiquement.
+
+    Args:
+        code: Le code Python à analyser.
+    """
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write(code)
+        path = f.name
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pycodestyle", "--max-line-length=100", path],
+            capture_output=True, text=True, timeout=5,
+        )
+        if not result.stdout.strip():
+            return "Aucune violation PEP 8 détectée."
+        cleaned = result.stdout.replace(path, "<code>")
+        return f"Problèmes PEP 8 détectés :\n{cleaned}"
+    except FileNotFoundError:
+        return (
+            "Le module pycodestyle n'est pas installé. "
+            "Réponds à l'élève en lui suggérant `pip install pycodestyle`."
+        )
+    finally:
+        Path(path).unlink(missing_ok=True)
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — Le décorateur \texttt{@tool}}
+
+\texttt{@tool} de \texttt{langchain\_core.tools} transforme une fonction
+Python en \texttt{BaseTool} consommable par un LLM. Ce qu'il fait sous
+le capot~:
+
+\begin{itemize}[leftmargin=*]
+  \item Lit la \textbf{signature} (noms et types des arguments) pour
+        générer un schéma JSON.
+  \item Lit la \textbf{docstring} pour produire la \emph{description}
+        du tool.
+  \item Encapsule l'appel pour intercepter exceptions et timeouts (à
+        compléter manuellement pour les cas avancés).
+\end{itemize}
+
+\begin{pythoncode}
+@tool
+def my_tool(query: str) -> str:
+    """Description du tool, en français OK."""
+    return "résultat"
+
+# my_tool est maintenant un BaseTool, pas une fonction normale
+my_tool.name           # "my_tool"
+my_tool.description    # "Description du tool, en français OK."
+my_tool.args_schema    # Pydantic model avec query: str
+\end{pythoncode}
+
+\subsubsection*{Étape 2 — La docstring est le contrat avec le LLM}
+
+La docstring est \textbf{envoyée au modèle} comme description du tool.
+Le modèle décide quand l'appeler en lisant cette description. Donc~:
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{À QUOI} sert le tool — première ligne, factuelle.
+  \item \textbf{QUAND} l'utiliser — situations explicites.
+  \item \textbf{QUAND PAS} l'utiliser — démarquage des autres tools.
+  \item \textbf{Args} typés et décrits — pour que le modèle remplisse
+        bien chaque paramètre.
+\end{itemize}
+
+\begin{quote}\itshape
+Une docstring vague = un agent qui prend de mauvaises décisions. Pour
+chaque tool, demande-toi : « si je donne CETTE docstring à un humain,
+peut-il savoir QUAND l'appeler sans hésitation~?» Si non, précise.
+\end{quote}
+
+\subsubsection*{Étape 3 — Les paramètres typés}
+
+Les types Python (\texttt{str}, \texttt{int}, \texttt{list[str]},
+\texttt{Literal[\dots]}\dots) sont traduits en JSON Schema dans la
+signature envoyée au LLM. Le modèle ne pourra pas appeler le tool avec
+le mauvais type — c'est validé par Pydantic en amont.
+
+Pour \texttt{generate\_exercise}, on accepte un \texttt{difficulty: str}
+au lieu d'un \texttt{Literal} parce qu'on veut un fallback côté Python
+plutôt qu'un crash si le modèle invente un niveau \texttt{"expert"}.
+C'est un choix~: rigide via \texttt{Literal} pour échouer fort, ou
+souple via \texttt{str + validation} pour dégrader proprement.
+
+\subsubsection*{Étape 4 — Patterns d'implémentation}
+
+\textbf{Lazy initialisation}. Le retriever du RAG (Phase 2) est lourd à
+charger. On le \emph{cache} dans une variable de module avec
+\texttt{global}~:
+
+\begin{pythoncode}
+_retriever = None
+
+def _get_retriever():
+    global _retriever
+    if _retriever is None:
+        vs = build_or_load_vectorstore()
+        _retriever = vs.as_retriever(search_kwargs={"k": 3})
+    return _retriever
+\end{pythoncode}
+
+Le retriever ne se charge que si le tool est effectivement appelé, et
+seulement la première fois.
+
+\textbf{Tempfile avec nettoyage}.
+\texttt{tempfile.NamedTemporaryFile(delete=False)} + bloc
+\texttt{try/finally} qui supprime explicitement~:
+
+\begin{pythoncode}
+with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+    f.write(code)
+    path = f.name
+try:
+    # ... utilise path ...
+    pass
+finally:
+    Path(path).unlink(missing_ok=True)
+\end{pythoncode}
+
+\textbf{Timeout sur subprocess}. Une boucle \texttt{while True} dans le
+code utilisateur bloquerait l'agent indéfiniment. Le \texttt{timeout=5}
+de \texttt{subprocess.run} lève \texttt{TimeoutExpired}~:
+
+\begin{pythoncode}
+try:
+    result = subprocess.run(..., timeout=5)
+except subprocess.TimeoutExpired:
+    return "ERREUR: timeout après 5 secondes. Le code boucle..."
+\end{pythoncode}
+
+\textbf{Messages d'erreur qui parlent au LLM}. Quand un tool échoue, le
+message de retour devient l'observation que voit le modèle. Mauvais~:
+\texttt{"Error 127"}. Bon~: \texttt{"Le module pycodestyle n'est pas
+installé. Réponds à l'élève en lui suggérant pip install
+pycodestyle."}~— le LLM sait alors quoi répondre.
+
+\begin{quote}\itshape
+Un tool n'a pas le droit de planter silencieusement, ni de lever une
+exception non gérée~: dans les deux cas, l'agent perd la main et
+l'utilisateur voit un crash. Toujours renvoyer un \emph{message clair}
+en cas d'erreur, même un message d'erreur.
+\end{quote}
+
+\subsubsection*{Étape 5 — Réutiliser les briques des phases précédentes}
+
+Chaque tool s'appuie sur ce qu'on a construit précédemment~:
+
+\begin{center}
+\begin{tabular}{p{4.5cm} p{10cm}}
+\toprule
+\textbf{Tool} & \textbf{Brique réutilisée} \\
+\midrule
+\texttt{search\_python\_docs} & Vector store + retriever (Phase 2). \\[1mm]
+\texttt{run\_python\_code}    & \texttt{subprocess} standard, pas LangChain. \\[1mm]
+\texttt{generate\_exercise}   & Chaîne \texttt{explain\_chain\_for\_level}
+                                avec \texttt{with\_structured\_output} (Phase 1). \\[1mm]
+\texttt{check\_pep8}          & \texttt{pycodestyle} en subprocess. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{quote}\itshape
+Un tool peut contenir une chaîne LCEL complète, voire un autre RAG.
+C'est le pattern « tool qui appelle un autre LLM en interne ». Très
+puissant pour décomposer un système complexe en agents qui se passent
+des tâches.
+\end{quote}
+
+\subsection{Vérification dans LangSmith}
+
+Quand un tool est appelé par l'agent, LangSmith trace~:
+
+\begin{center}
+\begin{tikzpicture}[every node/.style={font=\footnotesize\ttfamily, anchor=west}]
+  \node                              (a) {ToolNode (search\_python\_docs)};
+  \node[below=1mm of a, xshift=4mm]  (b) {Input  : \{"query": "Comment fonctionne yield ?"\}};
+  \node[below=1mm of b]              (c) {Output : "Source: docs.python.org/.../functional.html..."};
+  \node[below=1mm of c, xshift=-4mm] (d) {ToolNode (run\_python\_code)};
+  \node[below=1mm of d, xshift=4mm]  (e) {Input  : \{"code": "def f():..."\}};
+  \node[below=1mm of e]              (f) {Output : "STDOUT: ... | Exit code: 0"};
+\end{tikzpicture}
+\end{center}
+
+\begin{quote}\itshape
+Si un tool ne s'appelle jamais alors qu'il \emph{devrait}~: regarde sa
+docstring. Si un tool s'appelle \emph{trop}~: regarde aussi sa
+docstring. C'est presque toujours là.
+\end{quote}
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item \texttt{@tool} transforme une fonction Python en outil
+        consommable par un LLM. Signature et docstring deviennent un
+        contrat envoyé au modèle.
+  \item La docstring fait du \textbf{prompt engineering} sur le code~:
+        explicite à \textbf{quoi} sert le tool, \textbf{quand} l'appeler,
+        et \textbf{quand pas}.
+  \item Patterns essentiels~: lazy init pour les ressources lourdes,
+        \texttt{tempfile} avec nettoyage, \texttt{timeout} sur les
+        subprocess, messages d'erreur qui parlent au LLM.
+  \item Un tool peut contenir une chaîne LCEL, un RAG, ou n'importe
+        quel autre traitement Python — c'est l'orchestration côté agent
+        qui le rend pertinent.
+\end{enumerate}
+\par}
+
+% #####################################################################
+% #####################################################################
+\section{Construire l'agent avec \texttt{create\_agent}}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice 2. Assembler les tools dans un agent ReAct]
+Construis un agent qui combine~: le modèle de chat, la liste des 4 tools
+définis dans l'exercice 1, et un \texttt{system\_prompt} qui dicte le
+comportement attendu (français, pédagogique, règles d'usage des tools).
+
+\textbf{Contrainte}~: utiliser \texttt{create\_agent} de
+\texttt{langchain.agents} (LangChain 1.x), qui renvoie un \emph{graphe
+LangGraph} compilé prêt à \texttt{.invoke} ou \texttt{.stream}.
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Maîtriser \texttt{create\_agent(model, tools, system\_prompt)}~:
+        la voie officielle LangChain 1.x pour les agents ReAct.
+  \item Rédiger un \texttt{system\_prompt} qui couvre rôle, périmètre,
+        règles de comportement, et choix de langue.
+  \item Comprendre la signature d'invocation~:
+        \texttt{agent.invoke(\{"messages": [\dots]\})}.
+  \item Savoir que le retour de \texttt{create\_agent} est un
+        \textbf{graphe LangGraph} (donc tout LangGraph s'applique).
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\begin{center}
+\begin{tikzpicture}[node distance=8mm and 14mm]
+  \node[block] (model)  {Modèle LLM\\\scriptsize get\_model()};
+  \node[block, right=of model] (tools) {Liste de 4 tools};
+  \node[block, below=of model] (sysp)  {SYSTEM\_PROMPT\\\scriptsize règles + tools docs};
+
+  \node[block, right=24mm of sysp, fill=teal!10, draw=teal!60!black,
+        minimum width=44mm, minimum height=12mm] (ca) {create\_agent(\dots)};
+
+  \node[store, below=of ca] (graph) {Graphe LangGraph\\compilé};
+
+  \draw[flow] (model) -- (ca);
+  \draw[flow] (tools) -- (ca);
+  \draw[flow] (sysp)  -- (ca);
+  \draw[flow] (ca)    -- (graph) node[label, midway, right]{retourne};
+\end{tikzpicture}
+\end{center}
+
+\texttt{create\_agent} construit le graphe d'exécution de la boucle
+ReAct~: un nœud LLM qui décide, un nœud \texttt{ToolNode} qui exécute,
+et des arêtes conditionnelles qui les enchaînent jusqu'à la réponse
+finale.
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+from langchain.agents import create_agent
+from config import get_model
+
+
+TOOLS = [search_python_docs, run_python_code, generate_exercise, check_pep8]
+
+SYSTEM_PROMPT = """Tu es PyTutor, un assistant pédagogique pour des élèves apprenant Python.
+
+Tu as accès à 4 outils :
+  - search_python_docs : pour récupérer du contenu de la doc Python officielle
+  - run_python_code    : pour exécuter du code et observer ce qui se passe
+  - generate_exercise  : pour générer un exercice et ses questions
+  - check_pep8         : pour vérifier le style PEP 8
+
+Règles de comportement :
+1. Pour toute question factuelle sur Python (syntaxe, builtin, vocabulaire),
+   utilise search_python_docs AVANT de répondre. Cite la source dans ta réponse.
+2. Quand l'élève montre un code qui ne marche pas, exécute-le toi-même avec
+   run_python_code AVANT d'expliquer pourquoi, pour voir la vraie erreur.
+3. Quand tu donnes un exemple de code dans ta réponse, exécute-le d'abord pour
+   être sûr qu'il marche.
+4. Sois pédagogique : explique POURQUOI, pas seulement COMMENT.
+5. Adapte ton vocabulaire au niveau de l'élève (déduis-le de ses questions).
+6. Réponds en français.
+"""
+
+
+def build_agent():
+    """Construit l'agent PyTutor avec ses 4 tools."""
+    return create_agent(
+        model=get_model(),
+        tools=TOOLS,
+        system_prompt=SYSTEM_PROMPT,
+    )
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — La signature de \texttt{create\_agent}}
+
+\begin{pythoncode}
+create_agent(
+    model,                # instance ChatModel ou string "provider:model"
+    tools,                # liste de @tool callables
+    system_prompt=None,   # str, remplace l'ancien `prompt`
+    # ... d'autres options avancées
+)
+\end{pythoncode}
+
+Trois paramètres essentiels~:
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{\texttt{model}}~: une instance issue de \texttt{get\_model()}
+        (ou n'importe quel \texttt{BaseChatModel}). Ou une string courte
+        \texttt{"anthropic:claude-3-5-sonnet-20241022"}.
+  \item \textbf{\texttt{tools}}~: la liste de fonctions décorées
+        \texttt{@tool}. L'ordre n'a pas d'importance fonctionnelle,
+        mais peut influencer marginalement les décisions du modèle
+        (priorité au premier tool listé en cas d'ambiguïté).
+  \item \textbf{\texttt{system\_prompt}}~: instructions générales. C'est
+        le \emph{contrat global} de l'agent — son rôle, ses règles, son
+        ton.
+\end{itemize}
+
+\subsubsection*{Étape 2 — Anatomie d'un \texttt{system\_prompt} efficace}
+
+Le \texttt{SYSTEM\_PROMPT} de PyTutor a quatre sections distinctes~:
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Identité} (« Tu es PyTutor, un assistant pédagogique
+        \dots »).
+  \item \textbf{Inventaire des tools} (la même liste qu'aux yeux du
+        modèle, en clair). Redondant mais utile~: ancre la décision.
+  \item \textbf{Règles d'usage} numérotées qui couvrent les cas
+        critiques (utilise X avant Y, exécute le code avant de
+        l'expliquer, etc.).
+  \item \textbf{Méta-comportement} (langue, ton, public).
+\end{enumerate}
+
+\begin{quote}\itshape
+Le \texttt{system\_prompt} n'est pas un texte décoratif~: c'est le
+\textbf{principal levier de qualité} d'un agent. Une règle bien
+formulée évite des centaines d'appels de tool inutiles. Investis-y du
+temps.
+\end{quote}
+
+\subsubsection*{Étape 3 — Le graphe LangGraph sous le capot}
+
+\texttt{create\_agent} retourne un \textbf{graphe LangGraph compilé}, pas
+un simple \texttt{Runnable}. Visuellement, ce graphe a la forme~:
+
+\begin{center}
+\begin{tikzpicture}[node distance=5mm and 18mm]
+  \node[llm] (a) {agent (LLM)};
+  \node[tool, right=of a] (t) {tools (ToolNode)};
+  \node[block, below=of a] (end) {END};
+
+  \draw[flow] (a) -- (t) node[label, midway, above]{tool\_calls non vide};
+  \draw[flow] (t) -- (a) node[label, midway, below]{ToolMessage};
+  \draw[flow] (a) -- (end) node[label, midway, right]{pas de tool\_calls};
+\end{tikzpicture}
+\end{center}
+
+À chaque tour, le nœud LLM examine la conversation. Soit il décide
+d'appeler des tools (le graphe passe au \texttt{ToolNode}, exécute les
+appels, revient au LLM), soit il produit une réponse finale (le graphe
+se termine à \texttt{END}).
+
+\subsubsection*{Étape 4 — Invocation : \texttt{\{"messages": [\dots]\}}}
+
+L'agent s'utilise avec un dict contenant la clé \texttt{messages}~:
+
+\begin{pythoncode}
+from langchain_core.messages import HumanMessage
+
+agent = build_agent()
+result = agent.invoke({
+    "messages": [HumanMessage(content="Comment fonctionne yield ?")]
+})
+
+# result["messages"] contient TOUT l'historique :
+# [SystemMessage, HumanMessage, AIMessage(tool_calls=...), ToolMessage, AIMessage]
+\end{pythoncode}
+
+Le \texttt{system\_prompt} est injecté automatiquement au début par
+\texttt{create\_agent}~: tu n'as pas à le passer toi-même dans
+\texttt{messages}.
+
+\subsubsection*{Étape 5 — Le retour est l'historique complet}
+
+\texttt{result["messages"]} contient \textbf{toute la conversation},
+pas seulement la dernière réponse~:
+
+\begin{itemize}[leftmargin=*]
+  \item Le \texttt{SystemMessage} (ajouté par \texttt{create\_agent}).
+  \item Le \texttt{HumanMessage} initial.
+  \item Les \texttt{AIMessage} intermédiaires, parfois avec
+        \texttt{tool\_calls}.
+  \item Les \texttt{ToolMessage} qui contiennent les résultats des tools.
+  \item Le \texttt{AIMessage} final (la réponse à l'utilisateur).
+\end{itemize}
+
+C'est cette structure qu'on va lire dans les démos de l'exercice 3.
+
+\subsection{Vérification dans LangSmith}
+
+\subsubsection*{L'arbre d'exécution attendu}
+
+\begin{center}
+\begin{tikzpicture}[every node/.style={font=\footnotesize\ttfamily, anchor=west}]
+  \node                              (a) {LangGraph (agent compilé)};
+  \node[below=1mm of a, xshift=4mm]  (b) {agent (LLM) ← tour 1};
+  \node[below=1mm of b]              (c) {tools (ToolNode) ← exécute le(s) appel(s)};
+  \node[below=1mm of c]              (d) {agent (LLM) ← tour 2};
+  \node[below=1mm of d]              (e) {(éventuellement tools $\to$ agent à nouveau)};
+  \node[below=1mm of e]              (f) {END};
+\end{tikzpicture}
+\end{center}
+
+Trois choses à regarder dans une trace d'agent~:
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Le \texttt{system\_prompt} effectif} dans le premier
+        appel LLM (onglet \emph{Input}). Vérifie qu'il contient tes
+        règles ET les descriptions des tools.
+  \item \textbf{Les \texttt{tool\_calls}} dans chaque \texttt{AIMessage}~:
+        nom du tool appelé, arguments choisis par le LLM.
+  \item \textbf{Les \texttt{ToolMessage}}~: ce que les tools ont
+        \emph{vraiment} renvoyé au LLM. Une réponse incorrecte vient
+        souvent d'un tool qui a renvoyé un truc inattendu.
+\end{enumerate}
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item \texttt{create\_agent(model, tools, system\_prompt)} construit
+        un agent ReAct prêt à l'emploi en LangChain 1.x.
+  \item Le retour est un \textbf{graphe LangGraph compilé}~: tout
+        LangGraph s'applique (state, persistence, streaming, etc.).
+  \item Le \texttt{system\_prompt} doit avoir 4 parties~: identité,
+        inventaire des tools, règles numérotées, méta-comportement.
+  \item Invocation~:
+        \texttt{agent.invoke(\{"messages": [HumanMessage(\dots)]\})}.
+  \item Le retour est l'historique \textbf{complet} de la conversation
+        (System / Human / AI / Tool / AI / \dots).
+\end{enumerate}
+\par}
+
+% #####################################################################
+% #####################################################################
+\section{Observer la boucle Réfléchir-Agir-Observer (ReAct)}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice 3. Trois démos contrastées pour voir la boucle ReAct]
+Lance l'agent sur trois requêtes qui déclenchent des comportements
+différents~:
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Question factuelle}~: doit déclencher
+        \texttt{search\_python\_docs}.
+  \item \textbf{Code qui boucle}~: doit déclencher
+        \texttt{run\_python\_code} (l'agent voit le timeout en clair).
+  \item \textbf{Question multi-étape}~: doit déclencher
+        \emph{plusieurs} tools en chaîne (recherche + exercice).
+\end{enumerate}
+
+Écris une fonction \texttt{print\_trace(messages)} qui formate
+l'historique de la conversation pour qu'on \emph{voie} le déroulé de
+la boucle ReAct.
+
+\textbf{Contrainte}~: distinguer visuellement \texttt{HumanMessage},
+\texttt{AIMessage} (texte vs \texttt{tool\_calls}), et
+\texttt{ToolMessage} (résultat des tools).
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Lire l'historique de messages d'un agent~: ordre, types, contenu.
+  \item Comprendre la boucle \textbf{Réfléchir-Agir-Observer}~: le LLM
+        décide $\to$ le tool s'exécute $\to$ le LLM observe $\to$ il
+        re-décide jusqu'à pouvoir répondre.
+  \item Identifier quand un agent décide de \emph{s'arrêter}~:
+        l'\texttt{AIMessage} sans \texttt{tool\_calls} est la réponse
+        finale.
+  \item Construire un affichage lisible pour le déroulé pédagogique.
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\begin{center}
+\begin{tikzpicture}[node distance=4mm and 10mm]
+  \node[block]                          (start) {HumanMessage};
+  \node[llm,   below=of start]          (m1)    {Modèle\\\scriptsize tour 1 (Réfléchir)};
+  \node[tool,  below=of m1]             (t1)    {tool\_call exécuté\\\scriptsize ToolMessage en sortie (Observer)};
+  \node[llm,   below=of t1]             (m2)    {Modèle\\\scriptsize tour 2 (re-Réfléchir)};
+  \node[block, below=of m2]             (end)   {AIMessage final\\\scriptsize (pas de tool\_call)};
+
+  \draw[flow] (start) -- (m1);
+  \draw[flow] (m1)    -- (t1) node[label, midway, right]{Agir};
+  \draw[flow] (t1)    -- (m2);
+  \draw[flow] (m2)    -- (end);
+
+  \draw[flow, dashed, draw=orange!70!black]
+       (m2.west) ..controls +(-2,0) and +(-2,0).. (t1.west)
+       node[label, midway, left]{loop si tool\_calls};
+\end{tikzpicture}
+\end{center}
+
+À chaque tour~:
+\begin{enumerate}[leftmargin=*]
+  \item Le LLM \emph{réfléchit}~: examine la conversation et décide.
+  \item S'il décide d'appeler un ou plusieurs tools, il les liste dans
+        \texttt{AIMessage.tool\_calls}.
+  \item Le \texttt{ToolNode} \emph{agit}~: exécute chaque appel et
+        produit un \texttt{ToolMessage} par tool.
+  \item Le LLM \emph{observe}~: ces \texttt{ToolMessage} entrent dans
+        son contexte au tour suivant.
+  \item Boucle jusqu'à ce que le LLM produise un \texttt{AIMessage}
+        \textbf{sans \texttt{tool\_calls}}~— c'est la réponse finale.
+\end{enumerate}
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+from langchain_core.messages import (
+    HumanMessage, AIMessage, ToolMessage, SystemMessage,
+)
+
+
+def print_trace(messages, from_index: int = 0) -> None:
+    """Affiche le déroulé de la boucle ReAct depuis un index donné."""
+    for msg in messages[from_index:]:
+        if isinstance(msg, SystemMessage):
+            continue   # on n'affiche pas le system prompt
+        elif isinstance(msg, HumanMessage):
+            print(f"\n[USER]:\n  {msg.content}")
+        elif isinstance(msg, AIMessage):
+            if msg.content:
+                print(f"\n[AI]:\n  {msg.content}")
+            if hasattr(msg, "tool_calls") and msg.tool_calls:
+                print(f"\n[AI] décide d'appeler {len(msg.tool_calls)} tool(s) :")
+                for tc in msg.tool_calls:
+                    args_preview = str(tc["args"])[:100]
+                    suffix = "..." if len(str(tc["args"])) > 100 else ""
+                    print(f"   -> {tc['name']}({args_preview}{suffix})")
+        elif isinstance(msg, ToolMessage):
+            preview = msg.content[:300].replace("\n", "\n     ")
+            ellipsis = "..." if len(msg.content) > 300 else ""
+            print(f"\n[TOOL {msg.name}]:\n     {preview}{ellipsis}")
+
+
+def demo_factual_question() -> None:
+    """Question factuelle : devrait déclencher search_python_docs."""
+    agent = build_agent()
+    result = agent.invoke({
+        "messages": [HumanMessage(content="À quoi sert exactement le mot-clé `yield` ?")]
+    })
+    print_trace(result["messages"])
+
+
+def demo_buggy_code() -> None:
+    """Code qui boucle à l'infini : devrait déclencher run_python_code."""
+    buggy = """\
+def double_each(numbers):
+    for n in numbers:
+        numbers.append(n * 2)
+    return numbers
+
+print(double_each([1, 2, 3]))
+"""
+    agent = build_agent()
+    result = agent.invoke({
+        "messages": [HumanMessage(content=(
+            "Mon code ne se termine jamais. Tu peux m'aider ?\n\n"
+            f"```python\n{buggy}```"
+        ))]
+    })
+    print_trace(result["messages"])
+
+
+def demo_multi_tool() -> None:
+    """Question complexe : devrait chaîner plusieurs tools."""
+    agent = build_agent()
+    result = agent.invoke({
+        "messages": [HumanMessage(content=(
+            "Explique-moi les list comprehensions en t'appuyant sur la doc, "
+            "puis génère-moi un exercice de niveau intermédiaire pour pratiquer."
+        ))]
+    })
+    print_trace(result["messages"])
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — La structure de l'historique de messages}
+
+\texttt{result["messages"]} est une liste hétérogène, dans l'ordre
+chronologique~:
+
+\begin{center}
+\begin{tabular}{p{3.5cm} p{11cm}}
+\toprule
+\textbf{Type} & \textbf{Rôle} \\
+\midrule
+\texttt{SystemMessage}
+& Le \texttt{system\_prompt} injecté par \texttt{create\_agent}. Toujours
+en première position. \\[1mm]
+\texttt{HumanMessage}
+& Une requête utilisateur. \\[1mm]
+\texttt{AIMessage}
+& Une réponse (partielle ou finale) du LLM. Peut contenir~:
+\texttt{content} (texte), \texttt{tool\_calls} (liste d'appels à
+exécuter), ou les deux. \\[1mm]
+\texttt{ToolMessage}
+& Le résultat d'\emph{un} appel de tool. Contient \texttt{name} (nom du
+tool), \texttt{content} (résultat str), \texttt{tool\_call\_id}
+(corrélation avec l'\texttt{AIMessage.tool\_calls}). \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection*{Étape 2 — La boucle ReAct en pratique}
+
+Pour la démo \emph{question factuelle}, on observe typiquement~:
+
+\begin{enumerate}[leftmargin=*]
+  \item \texttt{HumanMessage}~: « À quoi sert yield~? »
+  \item \texttt{AIMessage} (tour 1, \textbf{Réfléchir})~: pas de
+        \texttt{content}, juste \texttt{tool\_calls} =
+        \texttt{[search\_python\_docs(query="yield")]}.
+  \item \texttt{ToolMessage} (\textbf{Agir + Observer})~: contient les
+        chunks de la doc sur \texttt{yield}.
+  \item \texttt{AIMessage} (tour 2, \textbf{re-Réfléchir})~:
+        \texttt{content} = réponse finale, pas de \texttt{tool\_calls}.
+\end{enumerate}
+
+C'est une boucle ReAct à \textbf{une seule itération}~: l'agent réfléchit,
+agit une fois, observe, puis répond.
+
+Pour la démo \emph{multi-tool}, la boucle a typiquement 2 itérations~:
+l'agent appelle d'abord \texttt{search\_python\_docs} pour la doc,
+\emph{observe} le résultat, puis appelle \texttt{generate\_exercise}
+pour l'exercice, observe à nouveau, puis répond.
+
+\subsubsection*{Étape 3 — La condition d'arrêt}
+
+L'agent s'arrête \textbf{exactement} quand le LLM produit un
+\texttt{AIMessage} sans \texttt{tool\_calls}. Ce n'est pas un nombre
+maximal de tours imposé par défaut~: c'est le LLM qui décide qu'il a
+assez d'informations pour répondre.
+
+\begin{quote}\itshape
+\textbf{Garde-fou de sécurité} : par défaut, le graphe a un
+\texttt{recursion\_limit} (typiquement 25 tours) qui force l'arrêt si
+l'agent boucle sans converger. C'est rare en pratique mais utile pour
+détecter un bug de prompt (« utilise toujours \texttt{search\_python\_docs}~»
+qui crée une boucle infinie de recherches).
+\end{quote}
+
+\subsubsection*{Étape 4 — \texttt{print\_trace} : afficher proprement}
+
+Trois choix d'affichage~:
+
+\begin{itemize}[leftmargin=*]
+  \item Distinguer \textbf{visuellement} chaque type de message avec un
+        préfixe (\texttt{[USER]}, \texttt{[AI]}, \texttt{[TOOL nom]}).
+        En production, on utiliserait des emojis ou des couleurs.
+  \item \textbf{Tronquer} les contenus longs (\texttt{[:300]}) pour
+        garder un déroulé lisible. Sans troncature, un \texttt{ToolMessage}
+        avec 4000 caractères de doc rend la trace illisible.
+  \item \textbf{Indenter} les contenus pour qu'on voit la structure
+        d'un coup d'œil.
+\end{itemize}
+
+\subsection{Vérification dans LangSmith}
+
+LangSmith trace chaque agent run avec une visualisation arborescente~:
+
+\begin{center}
+\begin{tikzpicture}[every node/.style={font=\footnotesize\ttfamily, anchor=west}]
+  \node                              (a) {LangGraph run};
+  \node[below=1mm of a, xshift=4mm]  (b) {agent (LLM, tour 1)};
+  \node[below=1mm of b, xshift=4mm]  (c) {Input  : [System, Human]};
+  \node[below=1mm of c]              (d) {Output : tool\_calls = [\{search\_python\_docs\}]};
+  \node[below=1mm of d, xshift=-4mm] (e) {tools (ToolNode)};
+  \node[below=1mm of e, xshift=4mm]  (f) {search\_python\_docs(query="yield")};
+  \node[below=1mm of f]              (g) {  Output : "Source: ..."};
+  \node[below=1mm of g, xshift=-4mm] (h) {agent (LLM, tour 2)};
+  \node[below=1mm of h, xshift=4mm]  (i) {Input  : [System, Human, AI, Tool]};
+  \node[below=1mm of i]              (j) {Output : "Le mot-clé yield..."};
+\end{tikzpicture}
+\end{center}
+
+\begin{quote}\itshape
+La vue \emph{timeline} dans LangSmith montre la durée de chaque tour~:
+on voit instantanément si un tool est lent (souvent
+\texttt{search\_python\_docs} avec embedding + recherche), si le LLM est
+lent (gros prompt), ou si la boucle a \emph{trop} d'itérations
+(probablement un bug de prompt).
+\end{quote}
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item L'historique d'un agent est une liste hétérogène~:
+        \texttt{System}, \texttt{Human}, \texttt{AIMessage} (avec ou
+        sans \texttt{tool\_calls}), \texttt{ToolMessage}.
+  \item Boucle ReAct~: \textbf{Réfléchir} (LLM décide) $\to$
+        \textbf{Agir} (tools exécutent) $\to$ \textbf{Observer} (LLM
+        relit) $\to$ re-Réfléchir, jusqu'à un \texttt{AIMessage} sans
+        \texttt{tool\_calls}.
+  \item L'agent décide seul de s'arrêter~: il n'y a pas de nombre fixe
+        de tours, juste un garde-fou \texttt{recursion\_limit} en cas de
+        bug.
+  \item Pour debugger un agent~: \textbf{lit l'historique}, regarde les
+        \texttt{tool\_calls} et les \texttt{ToolMessage}. La plupart des
+        problèmes sont là.
+\end{enumerate}
+\par}
+
+% #####################################################################
+% #####################################################################
+\section{Mémoire conversationnelle multi-tours}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice 4. Un chat où l'agent se souvient des tours précédents]
+Construis une boucle de chat (\emph{REPL}) où l'utilisateur peut poser
+plusieurs questions successives, et où l'agent \textbf{se souvient} des
+tours précédents (utile pour les « peux-tu approfondir~? », « et avec
+un exemple~? »\dots).
+
+\textbf{Contrainte}~: \texttt{create\_agent} ne stocke \emph{rien} entre
+les invocations. La mémoire est à maintenir côté client en accumulant
+l'historique de \texttt{messages} et en le réinjectant à chaque tour.
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Comprendre que l'agent par défaut est \textbf{stateless}~: chaque
+        \texttt{invoke} est indépendant.
+  \item Construire la mémoire côté client en accumulant la liste de
+        messages.
+  \item Quantifier le coût (en tokens) d'une mémoire qui s'allonge à
+        chaque tour.
+  \item Connaître les alternatives (\texttt{checkpointer} LangGraph) pour
+        une persistence native côté serveur.
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\begin{center}
+\begin{tikzpicture}[node distance=6mm and 14mm]
+  \node[block] (build) {build\_agent()\\\scriptsize une seule fois};
+  \node[data, below=of build] (hist) {history = []\\\scriptsize liste des messages};
+
+  \node[block, below=of hist] (loop) {while True:};
+  \node[block, below=of loop, fill=teal!10] (read) {user\_input = input(">")};
+  \node[block, below=of read] (append) {history.append(HumanMessage(\dots))};
+  \node[block, below=of append] (invoke) {result = agent.invoke(\{"messages": history\})};
+  \node[block, below=of invoke] (replace) {history = result["messages"]\\\scriptsize remplace par l'historique enrichi};
+  \node[block, below=of replace] (print) {print\_trace(history, from\_index=\dots)};
+
+  \draw[flow] (build)   -- (hist);
+  \draw[flow] (hist)    -- (loop);
+  \draw[flow] (loop)    -- (read);
+  \draw[flow] (read)    -- (append);
+  \draw[flow] (append)  -- (invoke);
+  \draw[flow] (invoke)  -- (replace);
+  \draw[flow] (replace) -- (print);
+
+  \draw[flow, dashed, draw=orange!70!black]
+       (print.east) ..controls +(2,0) and +(2,0).. (read.east)
+       node[label, midway, right]{tour suivant};
+\end{tikzpicture}
+\end{center}
+
+\textbf{Important}~: l'agent est construit une seule fois (hors boucle).
+À chaque tour, on accumule un nouveau \texttt{HumanMessage}, on
+\texttt{invoke} avec \emph{tout} l'historique, et on remplace
+l'historique par celui que renvoie l'agent (qui contient maintenant les
+nouveaux \texttt{AIMessage} et \texttt{ToolMessage}).
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+def chat_loop() -> None:
+    """Boucle de chat interactive avec mémoire conversationnelle.
+
+    create_agent ne stocke RIEN entre les invocations. Pour avoir une
+    conversation continue, on accumule les messages côté client et on les
+    renvoie à chaque tour.
+    """
+    print("MODE CHAT — Ctrl+C ou ligne vide pour quitter")
+
+    agent = build_agent()
+    history: list = []   # accumulera HumanMessage / AIMessage / ToolMessage
+
+    while True:
+        try:
+            user_input = input("\n> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nÀ bientôt.")
+            return
+
+        if not user_input:
+            print("Au revoir.")
+            return
+
+        # 1. On ajoute le nouveau message au contexte complet
+        history.append(HumanMessage(content=user_input))
+        index_before = len(history) - 1
+
+        # 2. L'agent renvoie l'historique complet enrichi
+        result  = agent.invoke({"messages": history})
+        history = result["messages"]
+
+        # 3. On n'affiche que les messages produits ce tour-ci
+        print_trace(history, from_index=index_before)
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — Pourquoi l'agent est stateless par défaut}
+
+\texttt{create\_agent} retourne un graphe LangGraph compilé qui, par
+défaut, n'a \textbf{pas de checkpointer}. Chaque \texttt{.invoke()}
+exécute le graphe \emph{from scratch} avec uniquement les messages
+qu'on lui donne en entrée. Aucune mémoire entre appels.
+
+C'est un choix de design~: la persistence est un \emph{problème
+séparé} (où stocker, comment indexer, comment expirer). LangChain ne
+veut pas imposer un backend particulier.
+
+\subsubsection*{Étape 2 — Maintenir l'historique côté client}
+
+Le pattern est simple~: on garde une liste \texttt{history}, on y ajoute
+le nouveau message utilisateur, on \texttt{invoke}, et on remplace
+\texttt{history} par ce que l'agent renvoie~:
+
+\begin{pythoncode}
+history.append(HumanMessage(content=user_input))
+result  = agent.invoke({"messages": history})
+history = result["messages"]
+\end{pythoncode}
+
+Après \texttt{invoke}, \texttt{history} contient~:
+\begin{itemize}[leftmargin=*]
+  \item Tout l'historique précédent.
+  \item Le nouveau \texttt{HumanMessage}.
+  \item Les éventuels \texttt{AIMessage(tool\_calls=\dots)} intermédiaires.
+  \item Les éventuels \texttt{ToolMessage} avec leurs résultats.
+  \item Le \texttt{AIMessage} final.
+\end{itemize}
+
+Au tour suivant, ces messages sont \emph{tous} renvoyés à l'agent — le
+LLM peut donc se référer aux échanges précédents.
+
+\subsubsection*{Étape 3 — Le coût en tokens augmente à chaque tour}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Tour} & \textbf{Tokens d'entrée du LLM} & \textbf{Cumul} \\
+\midrule
+1   & system + question 1 ($\sim$300 tokens) & 300 \\
+2   & + AI 1 + Human 2 ($\sim$800 tokens)    & 1100 \\
+3   & + AI 2 + Human 3 ($\sim$1500 tokens)   & 2600 \\
+\dots & \dots & \dots \\
+10  & cumul $\sim$15000 tokens               & 15000 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+À chaque tour, on \emph{paie} l'intégralité de l'historique précédent en
+tokens d'entrée. Sur des conversations longues, ça devient coûteux.
+
+\begin{quote}\itshape
+\textbf{Mitigation}~: tronquer l'historique (garder les N derniers
+messages), ou \emph{résumer} les anciens messages avec une chaîne LCEL
+quand la conversation dépasse une certaine taille (technique de la
+\emph{summary memory}).
+\end{quote}
+
+\subsubsection*{Étape 4 — Termination propre}
+
+Trois façons de sortir du chat~:
+
+\begin{itemize}[leftmargin=*]
+  \item \texttt{Ctrl+C}~: \texttt{input()} lève \texttt{KeyboardInterrupt}.
+  \item \texttt{Ctrl+D}~: \texttt{input()} lève \texttt{EOFError}.
+  \item \textbf{Ligne vide}~: \texttt{input()} renvoie \texttt{""}, on
+        traite explicitement.
+\end{itemize}
+
+\subsubsection*{Étape 5 — Alternative serveur : le \texttt{checkpointer} LangGraph}
+
+Pour une persistence native (utile dans un backend web), LangGraph
+fournit des \emph{checkpointers}~:
+
+\begin{pythoncode}
+from langgraph.checkpoint.memory import MemorySaver
+
+agent = create_agent(
+    model=get_model(),
+    tools=TOOLS,
+    system_prompt=SYSTEM_PROMPT,
+    checkpointer=MemorySaver(),   # ou SqliteSaver, PostgresSaver, ...
+)
+
+# Chaque conversation est identifiée par un thread_id :
+config = {"configurable": {"thread_id": "user-42"}}
+result = agent.invoke(
+    {"messages": [HumanMessage(content="Salut")]},
+    config=config,
+)
+\end{pythoncode}
+
+Le checkpointer stocke l'état du graphe (donc l'historique) entre les
+appels. L'utilisateur n'a plus à maintenir \texttt{history} côté client.
+
+\begin{quote}\itshape
+Pattern de production~: \texttt{MemorySaver} pour les tests, un
+\texttt{Sqlite}- ou \texttt{Postgres}-saver pour la prod. Avec un
+\texttt{thread\_id} par session utilisateur, on a un chat multi-utilisateur
+sans aucune logique de mémoire côté client.
+\end{quote}
+
+\subsection{Vérification dans LangSmith}
+
+Dans LangSmith, chaque \texttt{invoke} produit \textbf{une trace
+distincte} (sauf si on utilise un \texttt{trace} explicite). Les traces
+sont liées par leur projet et leur timestamp, mais pas automatiquement
+groupées par conversation.
+
+Pour grouper les runs d'un même utilisateur~:
+
+\begin{itemize}[leftmargin=*]
+  \item Avec checkpointer + \texttt{thread\_id}~: LangSmith expose le
+        \texttt{thread\_id} dans les métadonnées de chaque run, on peut
+        filtrer.
+  \item Sans checkpointer~: passer manuellement un \texttt{run\_name} ou
+        des \texttt{tags} pour grouper.
+\end{itemize}
+
+\begin{quote}\itshape
+Astuce~: dans la version stateless (notre exercice), tu peux comparer
+le \emph{nombre de tokens d'entrée} entre les runs successifs pour
+visualiser la croissance de l'historique. Sur une conversation de 10
+tours, c'est édifiant.
+\end{quote}
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item \texttt{create\_agent} est \textbf{stateless} par défaut~:
+        chaque \texttt{.invoke()} est indépendant.
+  \item Pour une mémoire conversationnelle simple~: accumuler les
+        \texttt{messages} côté client, et réinjecter \emph{toute}
+        l'historique à chaque tour.
+  \item Le coût en tokens d'entrée \textbf{croît à chaque tour}. Sur
+        conversations longues, tronquer ou résumer.
+  \item Pour une persistence native côté serveur~: passer un
+        \texttt{checkpointer} à \texttt{create\_agent} et identifier
+        chaque session par un \texttt{thread\_id}.
+  \item Pattern REPL standard~: init coûteux hors boucle, traitement
+        rapide dans la boucle, terminaison propre sur Ctrl+C / EOF /
+        ligne vide.
+\end{enumerate}
+\par}
+
+\end{document}

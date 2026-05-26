@@ -1,0 +1,30 @@
+# --- LangChain core (Phase 1, 2 et 3) ---
+# Note : LangChain 1.0 (oct. 2025) a refactorisé l'écosystème.
+# Le méta-package `langchain` est désormais slim ; les anciennes classes
+# `langchain.retrievers.*`, `langchain.chains.*`, etc., sont dans `langchain-classic`.
+langchain>=1.0
+langchain-classic>=1.0  # MultiQueryRetriever, ContextualCompressionRetriever, LLMChain...
+langchain-anthropic>=1.0
+langchain-community>=0.3
+langgraph>=1.0
+
+# --- Vector store local (Phase 2) ---
+langchain-chroma>=0.1.4
+chromadb>=0.5
+
+# --- Embeddings locaux, gratuits, sans clé API supplémentaire (Phase 2) ---
+# (~500 Mo à l'installation à cause de torch, mais ça reste local après)
+langchain-huggingface>=0.1
+sentence-transformers>=3.0
+
+# --- Chargement de documents web (Phase 2) ---
+beautifulsoup4>=4.12
+lxml>=5.0
+
+# --- Utilitaires ---
+python-dotenv>=1.0
+pydantic>=2.0
+pycodestyle>=2.12   # utilisé par le tool check_pep8 de la Phase 3
+
+# --- Optionnel mais recommandé pour la Phase 3 (UI rapide) ---
+# gradio>=4.0

@@ -1,0 +1,1301 @@
+% =====================================================================
+% Phase 2 — RAG sur la documentation Python officielle
+% Concepts essentiels du Retrieval-Augmented Generation avec LangChain.
+% Compilation : pdflatex -shell-escape phase2.tex (deux fois pour la TOC)
+% Pré-requis  : pygmentize (pip install Pygments) + paquet TeX "minted"
+% =====================================================================
+\documentclass[11pt,a4paper]{article}
+
+% ---------- Encodage & langue ----------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+
+% Glyphes Unicode utilisés dans le code Python copié-collé
+\DeclareUnicodeCharacter{2713}{\textbf{V}}   % ✓
+\DeclareUnicodeCharacter{2717}{\textbf{X}}   % ✗
+\DeclareUnicodeCharacter{2192}{$\rightarrow$}% →
+\DeclareUnicodeCharacter{2500}{-}            % ─ box drawing
+\DeclareUnicodeCharacter{276F}{>}            % ❯
+
+% ---------- Mise en page ----------
+\usepackage[a4paper,margin=2.2cm]{geometry}
+\usepackage{parskip}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!60!black,
+  urlcolor=blue!60!black,
+  citecolor=blue!60!black,
+  bookmarksopen=true,
+  bookmarksopenlevel=2,
+}
+
+% ---------- Boîtes & callouts ----------
+\usepackage[most]{tcolorbox}
+\tcbset{
+  enhanced,
+  colback=blue!3,
+  colframe=blue!50!black,
+  fonttitle=\bfseries,
+  arc=2pt, boxrule=0.6pt,
+}
+
+% ---------- Code avec minted ----------
+\usepackage{minted}
+\setminted{
+  fontsize=\small,
+  linenos=true,
+  numbersep=6pt,
+  frame=lines,
+  framesep=2mm,
+  bgcolor=gray!4,
+  breaklines=true,
+  breakanywhere=true,
+  python3=true,
+  tabsize=4,
+}
+\newminted{python}{}
+
+% ---------- TikZ ----------
+\usepackage{tikz}
+\usetikzlibrary{
+  arrows.meta, positioning, shapes.geometric, shapes.misc,
+  fit, backgrounds, calc, trees,
+  decorations.pathreplacing, decorations.markings,
+}
+
+\tikzset{
+  node distance=8mm and 12mm,
+  block/.style={
+    rectangle, rounded corners=2pt, draw=blue!60!black, fill=blue!8,
+    minimum width=42mm, minimum height=9mm, align=center, font=\small
+  },
+  data/.style={
+    rectangle, rounded corners=1pt, draw=gray!60, fill=gray!10,
+    minimum width=42mm, minimum height=8mm, align=center, font=\footnotesize\ttfamily
+  },
+  llm/.style={
+    rectangle, rounded corners=2pt, draw=red!60!black, fill=red!8,
+    minimum width=42mm, minimum height=9mm, align=center, font=\small
+  },
+  store/.style={
+    cylinder, shape border rotate=90, aspect=0.25,
+    draw=teal!60!black, fill=teal!10, minimum width=30mm, minimum height=14mm,
+    align=center, font=\small
+  },
+  doc/.style={
+    rectangle, rounded corners=1pt, draw=orange!70!black, fill=orange!8,
+    minimum width=36mm, minimum height=7mm, align=center, font=\scriptsize
+  },
+  parallel/.style={
+    rectangle, rounded corners=2pt, draw=violet!60!black, fill=violet!8,
+    minimum width=48mm, minimum height=9mm, align=center, font=\small
+  },
+  flow/.style={-{Stealth[length=2.2mm]}, thick, draw=blue!60!black},
+  flowdata/.style={-{Stealth[length=2.2mm]}, thick, draw=gray!60, dashed},
+  label/.style={font=\scriptsize\itshape, fill=white, inner sep=1pt},
+}
+
+% ---------- Titre ----------
+\title{\textbf{Phase 2 — RAG sur la documentation Python}\\
+\large Cinq concepts essentiels du \emph{Retrieval-Augmented Generation}}
+\author{Cours PyTutor2}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+Cette phase 2 construit, brique par brique, un système de
+\emph{Retrieval-Augmented Generation} (RAG) qui répond à des questions
+en s'appuyant sur la documentation Python officielle. On y aborde~:
+l'indexation (Web $\to$ embeddings $\to$ Chroma persistante), le
+\texttt{Retriever} LCEL, la chaîne RAG canonique en LCEL, la récupération
+des sources avec \texttt{RunnableParallel}, et la comparaison
+\emph{similarity vs MMR}. Chaque exercice suit la même structure que
+la Phase 1 (énoncé + objectifs en boîte, solution détaillée, vérification
+LangSmith, récapitulatif).
+\end{abstract}
+
+\tableofcontents
+\bigskip
+
+% #####################################################################
+% #####################################################################
+\section{Indexation : du Web vers la base vectorielle}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice 1. Construire un index Chroma persistant]
+Aspire 7 pages de la documentation officielle Python
+(\texttt{docs.python.org/3/tutorial/*}), découpe-les en \emph{chunks},
+encode-les en vecteurs avec un modèle d'embeddings local, et persiste
+l'index sur disque dans un dossier \texttt{chroma\_db/}.
+
+Tu écriras une fonction \texttt{build\_or\_load\_vectorstore(force\_rebuild=False)}
+qui~: (a) \textbf{recharge} l'index depuis le disque si \texttt{chroma\_db/}
+existe ; (b) \textbf{reconstruit} l'index si l'argument \texttt{force\_rebuild}
+est vrai ou si le dossier n'existe pas.
+
+\textbf{Contrainte}~: l'indexation initiale prend $\sim$30 s (téléchargement
+des embeddings + scraping des URL) ; les lancements suivants doivent
+prendre $<$1 s grâce à la persistance.
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Utiliser \texttt{WebBaseLoader} pour aspirer une liste d'URL et
+        obtenir des \texttt{Document} LangChain (texte + \texttt{metadata}).
+  \item Choisir un \texttt{chunk\_size} et un \texttt{chunk\_overlap}
+        cohérents pour de la doc technique, avec
+        \texttt{RecursiveCharacterTextSplitter}.
+  \item Encoder du texte en vecteurs avec
+        \texttt{HuggingFaceEmbeddings} (modèle local, gratuit).
+  \item Persister un \texttt{Chroma} sur disque et savoir le recharger
+        sans réindexer.
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\begin{center}
+\begin{tikzpicture}[node distance=5mm and 14mm]
+  \node[doc] (urls) {7 URL\\docs.python.org};
+  \node[block, below=of urls] (loader) {WebBaseLoader\\\scriptsize \texttt{.load()}};
+  \node[doc, below=of loader] (raw) {7 \texttt{Document}\\(une page = un doc)};
+  \node[block, below=of raw] (splitter) {RecursiveCharacterTextSplitter\\\scriptsize \texttt{chunk\_size=1000, overlap=200}};
+  \node[doc, below=of splitter] (chunks) {$\sim$300 chunks};
+  \node[block, below=of chunks] (embeds) {HuggingFaceEmbeddings\\\scriptsize \texttt{all-MiniLM-L6-v2} (384-d)};
+  \node[store, below=of embeds] (chroma) {Chroma\\\scriptsize \texttt{chroma\_db/}};
+
+  \draw[flow] (urls)    -- (loader);
+  \draw[flow] (loader)  -- (raw);
+  \draw[flow] (raw)     -- (splitter);
+  \draw[flow] (splitter)-- (chunks);
+  \draw[flow] (chunks)  -- (embeds);
+  \draw[flow] (embeds)  -- (chroma) node[label, midway, right]{persistance};
+\end{tikzpicture}
+\end{center}
+
+Un pipeline en quatre étapes~: \textbf{scraping}, \textbf{découpage},
+\textbf{encodage}, \textbf{stockage}. La séparation entre indexation
+(lente, faite une fois) et interrogation (rapide, à chaque question)
+est essentielle pour un RAG utilisable au quotidien.
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+from pathlib import Path
+
+from langchain_community.document_loaders import WebBaseLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_chroma import Chroma
+
+
+PYTHON_DOCS_URLS = [
+    "https://docs.python.org/3/tutorial/controlflow.html",
+    "https://docs.python.org/3/tutorial/datastructures.html",
+    "https://docs.python.org/3/tutorial/classes.html",
+    "https://docs.python.org/3/tutorial/errors.html",
+    "https://docs.python.org/3/tutorial/modules.html",
+    "https://docs.python.org/3/howto/functional.html",
+    "https://docs.python.org/3/glossary.html",
+]
+
+PERSIST_DIR     = "./chroma_db"
+EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+COLLECTION_NAME = "python_docs"
+
+
+def get_embeddings() -> HuggingFaceEmbeddings:
+    """Singleton de fait : un seul modèle d'embeddings réutilisé partout."""
+    return HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+
+
+def build_or_load_vectorstore(force_rebuild: bool = False) -> Chroma:
+    """Recharge l'index si chroma_db/ existe, sinon le construit."""
+    embeddings = get_embeddings()
+    persist_path = Path(PERSIST_DIR)
+
+    if persist_path.exists() and not force_rebuild:
+        print(f"✓ Rechargement de l'index depuis {PERSIST_DIR}")
+        return Chroma(
+            collection_name=COLLECTION_NAME,
+            persist_directory=PERSIST_DIR,
+            embedding_function=embeddings,
+        )
+
+    # --- 1. Scraping : URL → Document ---
+    loader = WebBaseLoader(PYTHON_DOCS_URLS)
+    loader.requests_kwargs = {"headers": {"User-Agent": "PyTutor-Edu/0.1"}}
+    raw_docs = loader.load()
+
+    # --- 2. Découpage : Document → chunks ---
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=200,
+        separators=["\n\n", "\n", ". ", " ", ""],
+    )
+    chunks = splitter.split_documents(raw_docs)
+
+    # --- 3. Encodage + 4. Persistance (en une étape) ---
+    vectorstore = Chroma.from_documents(
+        documents=chunks,
+        embedding=embeddings,
+        collection_name=COLLECTION_NAME,
+        persist_directory=PERSIST_DIR,
+    )
+    return vectorstore
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — \texttt{WebBaseLoader} : du Web au \texttt{Document}}
+
+\texttt{WebBaseLoader(urls)} accepte une URL ou une liste d'URL. Chaque
+page devient un \texttt{langchain\_core.documents.Document}~:
+
+\begin{pythoncode}
+Document(
+    page_content="Texte complet de la page...",
+    metadata={"source": "https://docs.python.org/3/tutorial/classes.html",
+              "title": "9. Classes"},
+)
+\end{pythoncode}
+
+Le champ \texttt{metadata["source"]} est précieux~: il permettra plus tard
+de \textbf{citer les sources} et de filtrer.
+
+\begin{quote}\itshape
+\textbf{User-Agent personnalisé}~:
+\texttt{loader.requests\_kwargs = \{"headers": \{"User-Agent": "PyTutor-Edu/0.1"\}\}}.
+Certains sites bloquent les bots anonymes ; mieux vaut s'identifier
+explicitement.
+\end{quote}
+
+\subsubsection*{Étape 2 — \texttt{RecursiveCharacterTextSplitter} : le découpage}
+
+Un \texttt{Document} de 50~000 caractères est inutilisable directement~:
+trop gros pour le contexte du LLM, et la recherche par similarité perd
+en précision sur des blocs trop larges. On découpe en \emph{chunks}~:
+
+\begin{pythoncode}
+RecursiveCharacterTextSplitter(
+    chunk_size=1000,                                # en CARACTÈRES
+    chunk_overlap=200,                              # 20% de chevauchement
+    separators=["\n\n", "\n", ". ", " ", ""],       # ordre prioritaire
+)
+\end{pythoncode}
+
+Trois paramètres clés~:
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{\texttt{chunk\_size=1000}}~: en caractères, \emph{pas en
+        tokens}. 1000 caractères $\approx$ 200--250 tokens — bon compromis
+        pour de la doc technique.
+  \item \textbf{\texttt{chunk\_overlap=200}}~: 20\% de chevauchement entre
+        chunks consécutifs. Évite de couper une idée en deux.
+  \item \textbf{\texttt{separators}}~: l'ordre compte. Le splitter essaie
+        d'abord \texttt{"\textbackslash n\textbackslash n"} (paragraphe),
+        puis \texttt{"\textbackslash n"} (ligne), puis \texttt{". "} (phrase),
+        et en dernier recours au milieu d'un mot.
+\end{itemize}
+
+\begin{quote}\itshape
+La \emph{taille du chunk} est l'hyperparamètre n\textsuperscript{o}1 de
+qualité d'un RAG. Trop petit~: contexte fragmenté, le modèle manque le
+sens global. Trop grand~: le retriever distingue mal les passages
+pertinents des passages tangentiels. 800-1200 caractères est le sweet
+spot pour de la doc technique.
+\end{quote}
+
+\subsubsection*{Étape 3 — \texttt{HuggingFaceEmbeddings} : encoder en vecteurs}
+
+L'embedding transforme une chaîne de caractères en vecteur dense de
+dimension fixe ($\sim$384 ici). Deux passages sémantiquement proches
+donnent des vecteurs proches en distance cosinus.
+
+\begin{pythoncode}
+HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+\end{pythoncode}
+
+Le modèle \texttt{all-MiniLM-L6-v2}~:
+\begin{itemize}[leftmargin=*]
+  \item \textbf{384 dimensions} (compact, rapide)
+  \item \textbf{Multilingue} (utile pour des questions en français sur
+        de la doc anglaise)
+  \item \textbf{Local} (pas d'appel API, pas de coût par requête)
+  \item \textbf{$\sim$80~MB} (téléchargé une fois, mis en cache)
+\end{itemize}
+
+\subsubsection*{Étape 4 — \texttt{Chroma} : stocker et rechercher}
+
+\texttt{Chroma} est une base de données vectorielle qui~:
+\begin{itemize}[leftmargin=*]
+  \item Indexe les vecteurs pour la recherche par similarité.
+  \item Stocke \texttt{page\_content} et \texttt{metadata} à côté.
+  \item Persiste dans un dossier sur disque
+        (\texttt{persist\_directory}).
+\end{itemize}
+
+\texttt{Chroma.from\_documents(\dots)} fait tout en une étape~: calcule
+les embeddings, indexe, persiste. Pour recharger plus tard~:
+
+\begin{pythoncode}
+Chroma(
+    collection_name="python_docs",
+    persist_directory="./chroma_db",
+    embedding_function=embeddings,  # même modèle qu'à l'indexation !
+)
+\end{pythoncode}
+
+\subsubsection*{Étape 5 — Le pattern \emph{lazy rebuild}}
+
+L'indexation est lente. On la fait une fois et on recharge ensuite~:
+
+\begin{pythoncode}
+if persist_path.exists() and not force_rebuild:
+    return Chroma(...)             # rechargement <1s
+# sinon, indexation complète
+\end{pythoncode}
+
+C'est le pattern à connaître pour tous les artefacts coûteux à construire~:
+embeddings, modèles fine-tunés, caches de prompts, etc.
+
+\subsection{Vérification dans LangSmith}
+
+L'indexation pure n'implique \textbf{pas} d'appel LLM, donc rien à voir
+dans LangSmith ici. Tu peux vérifier le contenu de l'index directement~:
+
+\begin{pythoncode}
+vs = build_or_load_vectorstore()
+print(vs._collection.count())          # nombre de chunks indexés
+docs = vs.similarity_search("lambda", k=3)
+for d in docs:
+    print(d.metadata["source"], d.page_content[:100])
+\end{pythoncode}
+
+\begin{quote}\itshape
+LangSmith ne trace que les \texttt{Runnable} (chaînes, appels LLM,
+retrievers). L'indexation Chroma se passe \emph{en dehors} de ce
+périmètre — c'est pourquoi on l'isole soigneusement du reste du code.
+\end{quote}
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item Le pipeline d'indexation est universel~: \texttt{Loader $\to$
+        Splitter $\to$ Embeddings $\to$ VectorStore}.
+  \item \texttt{chunk\_size} est le \textbf{premier} hyperparamètre à
+        régler. 800--1200 caractères pour de la doc technique.
+  \item \texttt{chunk\_overlap} $\approx$ 20\% du \texttt{chunk\_size}
+        évite de couper une idée en deux.
+  \item \texttt{HuggingFaceEmbeddings} est local, gratuit, multilingue.
+        L'alternative \texttt{OpenAIEmbeddings} est plus performante mais
+        payante.
+  \item \texttt{Chroma} persiste sur disque. Pattern \emph{lazy rebuild}~:
+        recharger si l'index existe, sinon reconstruire.
+\end{enumerate}
+\par}
+
+% #####################################################################
+% #####################################################################
+\section{Retriever : recherche par similarité}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice 2. Transformer un vectorstore en \texttt{Runnable} LCEL]
+À partir d'un \texttt{Chroma} indexé, construis un \texttt{Retriever}
+qui prend une chaîne de caractères en entrée et renvoie les \texttt{k}
+documents les plus pertinents par similarité cosinus.
+
+\textbf{Contrainte}~: le \texttt{Retriever} doit être un
+\texttt{Runnable} LCEL, c'est-à-dire qu'il doit pouvoir être composé
+avec \texttt{|}, batché, streamé, et tracé dans LangSmith comme n'importe
+quel autre maillon.
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Comprendre comment \texttt{vectorstore.as\_retriever()} produit
+        un \texttt{Runnable} à partir d'un index Chroma.
+  \item Paramétrer la recherche~: \texttt{k} (nombre de docs retournés),
+        \texttt{search\_type} (\texttt{"similarity"} par défaut).
+  \item Savoir lire ce qui se passe sous le capot~: \emph{embedding de
+        la query $\to$ produit scalaire $\to$ tri $\to$ top-k}.
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\begin{center}
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[node distance=6mm and 14mm]
+  \node[data] (query) {"Comment écrire un\\générateur en Python ?"};
+  \node[block, right=of query] (embed) {Embeddings\\\scriptsize encode la query};
+  \node[data, right=of embed] (qvec) {vecteur (384-d)};
+
+  \node[store, below=12mm of embed] (chroma) {Chroma\\$\sim$300 vecteurs};
+  \node[block, below=12mm of qvec] (sim) {Recherche\\\scriptsize cosine + top-k};
+
+  \node[doc, right=of sim] (docs) {[Doc, Doc, Doc, Doc]\\\scriptsize (k=4)};
+
+  \draw[flowdata] (query) -- (embed);
+  \draw[flow]     (embed) -- (qvec);
+  \draw[flow]     (qvec)  -- (sim);
+  \draw[flow]     (chroma)-- (sim) node[label, midway, above, sloped]{candidats};
+  \draw[flow]     (sim)   -- (docs);
+\end{tikzpicture}%
+}
+\end{center}
+
+Le retriever fait deux choses~: (1) encoder la \emph{query} avec le même
+modèle d'embeddings que les documents, (2) chercher les \texttt{k}
+vecteurs les plus proches par similarité cosinus.
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+# Le retriever est obtenu d'une seule ligne à partir du vectorstore.
+vectorstore = build_or_load_vectorstore()
+
+retriever = vectorstore.as_retriever(
+    search_type="similarity",        # défaut, on l'écrit pour la clarté
+    search_kwargs={"k": 4},          # nombre de docs renvoyés
+)
+
+# Le retriever est un Runnable : .invoke, .batch, .stream marchent
+docs = retriever.invoke("Comment écrire un générateur en Python ?")
+
+for i, d in enumerate(docs, 1):
+    print(f"[{i}] {d.metadata['source']}")
+    print(d.page_content[:200], "...")
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — \texttt{.as\_retriever()} : du store au \texttt{Runnable}}
+
+Un \texttt{Chroma} (ou n'importe quel \texttt{VectorStore} LangChain)
+n'est pas directement un \texttt{Runnable}. La méthode
+\texttt{.as\_retriever()} en crée un, qui peut alors être composé dans
+une chaîne LCEL avec l'opérateur \texttt{|}.
+
+\begin{pythoncode}
+retriever = vectorstore.as_retriever(...)
+# retriever est un Runnable
+type(retriever).__mro__   # contient Runnable[str, list[Document]]
+\end{pythoncode}
+
+Le contrat de type~: \texttt{str $\to$ list[Document]}.
+
+\subsubsection*{Étape 2 — Ce qui se passe à l'\texttt{.invoke()}}
+
+\begin{enumerate}[leftmargin=*]
+  \item La \texttt{query} (str) est encodée avec le \textbf{même
+        \texttt{HuggingFaceEmbeddings}} qui a indexé les documents.
+        C'est crucial~: utiliser un autre modèle d'embeddings produirait
+        un vecteur incomparable avec ceux de l'index.
+  \item Chroma calcule la similarité cosinus entre le vecteur query et
+        \textbf{tous} les vecteurs indexés (en pratique avec un index
+        approximatif pour aller vite).
+  \item Les \texttt{k} chunks de plus haute similarité sont renvoyés,
+        triés par score décroissant.
+\end{enumerate}
+
+\begin{quote}\itshape
+\textbf{Pourquoi cosinus et pas euclidienne~?} La distance euclidienne
+dépend de la norme des vecteurs ; la similarité cosinus ne dépend que de
+l'angle. Pour des embeddings de phrases, c'est l'angle qui porte le sens.
+\end{quote}
+
+\subsubsection*{Étape 3 — Le paramètre \texttt{k}}
+
+\texttt{k} est le nombre de chunks à renvoyer. C'est l'hyperparamètre
+n\textsuperscript{o}2 de qualité du RAG (après \texttt{chunk\_size})~:
+
+\begin{itemize}[leftmargin=*]
+  \item \texttt{k=1}~: trop pauvre, on rate souvent du contexte adjacent.
+  \item \texttt{k=4} à \texttt{k=6}~: standard pour de la doc technique.
+  \item \texttt{k=10+}~: contexte saturé, le LLM peut perdre le fil.
+        Coût en tokens augmenté.
+\end{itemize}
+
+\subsubsection*{Étape 4 — Le retriever dans une chaîne LCEL}
+
+Comme tout \texttt{Runnable}, le retriever se compose~:
+
+\begin{pythoncode}
+# Construire un mini-pipeline
+def truncate(docs, n=3):
+    return docs[:n]
+
+mini_chain = retriever | truncate
+# Mini-chain reçoit une str et renvoie les 3 premiers docs
+\end{pythoncode}
+
+On verra dans l'exercice 3 comment l'enchaîner avec un prompt et un
+modèle pour faire un RAG complet.
+
+\subsection{Vérification dans LangSmith}
+
+Quand le retriever est utilisé dans une chaîne tracée, LangSmith affiche~:
+
+\begin{center}
+\begin{tikzpicture}[every node/.style={font=\footnotesize\ttfamily, anchor=west}]
+  \node                              (a) {Retriever (VectorStoreRetriever)};
+  \node[below=1mm of a, xshift=4mm]  (b) {Input  : "Comment écrire un générateur en Python ?"};
+  \node[below=1mm of b]              (c) {Output : [Document, Document, Document, Document]};
+  \node[below=1mm of c, xshift=4mm]  (d) {[0] source: tutorial/classes.html};
+  \node[below=1mm of d]              (e) {[1] source: howto/functional.html};
+  \node[below=1mm of e]              (f) {[2] ...};
+\end{tikzpicture}
+\end{center}
+
+\begin{quote}\itshape
+L'onglet \emph{Output} montre la liste des \texttt{Document} renvoyés
+avec leur \texttt{metadata} (notamment \texttt{source}). C'est le
+\textbf{premier endroit où regarder} quand un RAG répond mal~: souvent
+le retriever a ramené du contexte hors-sujet.
+\end{quote}
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item \texttt{vectorstore.as\_retriever(\dots)} transforme un store
+        en \texttt{Runnable} LCEL, composable avec \texttt{|}.
+  \item Contrat du retriever~: \texttt{str $\to$ list[Document]}.
+  \item Sous le capot~: encode la query avec le \emph{même} modèle
+        d'embeddings, cherche les top-\texttt{k} par cosinus.
+  \item \texttt{k=4} à \texttt{k=6} est le standard pour de la doc
+        technique.
+  \item Premier point de débogage d'un RAG cassé~: regarder l'output du
+        retriever dans LangSmith.
+\end{enumerate}
+\par}
+
+% #####################################################################
+% #####################################################################
+\section{Chaîne RAG simple en LCEL}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice 3. Composer un RAG end-to-end en LCEL]
+Construis une chaîne \texttt{Runnable} qui prend une \textbf{question
+en texte brut} et renvoie une \textbf{réponse en texte brut}, en
+s'appuyant sur le retriever de l'exercice 2 pour récupérer du contexte
+pertinent dans la doc Python.
+
+\textbf{Contrainte}~: utiliser le pattern canonique LCEL avec un dict
+implicite qui contient deux branches \texttt{context} et \texttt{question},
+puis composer \texttt{| prompt | model | StrOutputParser()}. Le modèle
+doit \textbf{citer ses sources} par numéro \texttt{[N]}.
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Reconnaître le \textbf{pattern canonique RAG en LCEL}~:
+        \texttt{\{context, question\} | prompt | model | parser}.
+  \item Utiliser \texttt{RunnablePassthrough()} pour faire passer la
+        question à travers une branche du dict implicite.
+  \item Composer \texttt{retriever | format\_docs} pour transformer la
+        liste de \texttt{Document} en string utilisable dans le prompt.
+  \item Donner au modèle des instructions claires pour s'appuyer sur
+        le contexte fourni et citer les sources.
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\begin{center}
+\begin{tikzpicture}[node distance=5mm and 14mm]
+  \node[data] (q) {"Comment écrire un\\générateur en Python ?"};
+
+  \node[parallel, below=10mm of q] (dict) {\{context, question\}\\\scriptsize (RunnableParallel implicite)};
+
+  \node[block, below left=10mm and 12mm of dict]  (ret)  {retriever\\\scriptsize | format\_docs};
+  \node[block, below right=10mm and 12mm of dict] (pass) {RunnablePassthrough\\\scriptsize (question inchangée)};
+
+  \node[block, below=22mm of dict] (prompt) {RAG\_PROMPT};
+  \node[llm,   below=of prompt]    (model)  {Modèle de chat};
+  \node[block, below=of model]     (parser) {StrOutputParser};
+  \node[data,  below=of parser]    (out)    {réponse (str)};
+
+  \draw[flowdata] (q)    -- (dict);
+  \draw[flow]     (dict) -- (ret);
+  \draw[flow]     (dict) -- (pass);
+  \draw[flow]     (ret)  -- (prompt) node[label, midway, sloped, above]{context: "[1] ..."};
+  \draw[flow]     (pass) -- (prompt) node[label, midway, sloped, above]{question};
+  \draw[flow]     (prompt)-- (model);
+  \draw[flow]     (model) -- (parser);
+  \draw[flow]     (parser)-- (out);
+\end{tikzpicture}
+\end{center}
+
+L'input (str) est dupliqué dans deux branches qui s'exécutent en
+parallèle~: l'une va chercher le contexte, l'autre laisse passer la
+question. Les deux résultats sont assemblés dans un dict que le prompt
+sait formater.
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+from langchain_core.documents import Document
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
+from config import get_model
+
+
+RAG_PROMPT = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        "Tu es un assistant pédagogique pour des élèves de Python. "
+        "Réponds à la question en t'appuyant UNIQUEMENT sur le contexte fourni.\n"
+        "Si la réponse n'est pas dans le contexte, dis-le explicitement plutôt "
+        "que d'inventer. Cite le ou les chunks utilisés par leur numéro entre "
+        "crochets, par exemple [1] ou [2,3]."
+    ),
+    (
+        "human",
+        "Contexte :\n{context}\n\n"
+        "Question : {question}\n\n"
+        "Réponse pédagogique :"
+    ),
+])
+
+
+def format_docs(docs: list[Document]) -> str:
+    """Concatène les documents en un bloc de contexte numéroté."""
+    return "\n\n".join(
+        f"[{i + 1}] (source: {doc.metadata.get('source', '?')})\n{doc.page_content}"
+        for i, doc in enumerate(docs)
+    )
+
+
+def build_rag_chain(retriever):
+    """Chaîne RAG simple : str -> str."""
+    return (
+        {
+            "context":  retriever | format_docs,
+            "question": RunnablePassthrough(),
+        }
+        | RAG_PROMPT
+        | get_model()
+        | StrOutputParser()
+    )
+
+
+# Usage
+vectorstore = build_or_load_vectorstore()
+retriever   = vectorstore.as_retriever(search_kwargs={"k": 4})
+chain       = build_rag_chain(retriever)
+
+answer = chain.invoke("Comment écrire un générateur en Python ?")
+print(answer)
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — Le dict implicite = \texttt{RunnableParallel}}
+
+\begin{pythoncode}
+{
+    "context":  retriever | format_docs,
+    "question": RunnablePassthrough(),
+}
+\end{pythoncode}
+
+Quand un dict apparaît dans une chaîne LCEL (au début ou via
+\texttt{|}), LCEL le convertit \textbf{implicitement} en
+\texttt{RunnableParallel}. Les deux branches reçoivent le même input
+(la question, str) et s'exécutent en parallèle~:
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{branche \texttt{context}}~: la string passe par
+        \texttt{retriever} (qui renvoie une \texttt{list[Document]}),
+        puis par \texttt{format\_docs} (qui renvoie une str).
+  \item \textbf{branche \texttt{question}}~: la string traverse
+        \texttt{RunnablePassthrough()} inchangée.
+\end{itemize}
+
+La sortie est un dict \texttt{\{"context": "[1] ...", "question": "..."\}}
+prêt à être consommé par le prompt.
+
+\begin{quote}\itshape
+Pattern à mémoriser~: \textbf{\texttt{\{ "key1": branch1, "key2":
+branch2 \} | prompt | model | parser}}. C'est la forme canonique du RAG
+en LCEL. Tu la reverras 1000 fois.
+\end{quote}
+
+\subsubsection*{Étape 2 — \texttt{retriever | format\_docs}}
+
+\texttt{retriever} produit une \texttt{list[Document]}. Le prompt attend
+une chaîne de caractères pour la variable \texttt{\{context\}}. La
+composition \texttt{retriever | format\_docs} chaîne les deux~:
+
+\begin{pythoncode}
+def format_docs(docs):
+    return "\n\n".join(
+        f"[{i+1}] (source: {d.metadata['source']})\n{d.page_content}"
+        for i, d in enumerate(docs)
+    )
+\end{pythoncode}
+
+Trois détails~:
+\begin{itemize}[leftmargin=*]
+  \item Numérotation \texttt{[1]}, \texttt{[2]}, \dots~: indispensable
+        pour que le modèle puisse citer les sources \emph{par numéro}.
+  \item Ajout de la \texttt{source} dans chaque bloc~: traçabilité, et
+        permet au modèle de citer l'URL.
+  \item Séparateur \texttt{"\textbackslash n\textbackslash n"}~: les LLM
+        repèrent mieux les blocs distincts ainsi qu'avec un simple
+        \texttt{"\textbackslash n"}.
+\end{itemize}
+
+\subsubsection*{Étape 3 — \texttt{RunnablePassthrough}}
+
+\texttt{RunnablePassthrough()} est l'identité de LCEL~: il prend un input
+et le renvoie inchangé. Utile dans un \texttt{RunnableParallel} pour
+\emph{conserver} une valeur d'entrée tout en faisant autre chose avec
+elle dans une autre branche.
+
+\begin{pythoncode}
+RunnablePassthrough().invoke("hello")   # → "hello"
+\end{pythoncode}
+
+\subsubsection*{Étape 4 — Le prompt RAG}
+
+Le prompt système contient \textbf{trois consignes} essentielles~:
+
+\begin{enumerate}[leftmargin=*]
+  \item « UNIQUEMENT sur le contexte fourni » — anti-hallucination.
+  \item « Si la réponse n'est pas dans le contexte, dis-le » — préserve
+        l'honnêteté épistémique.
+  \item « Cite les chunks par numéro \texttt{[N]} » — traçabilité.
+\end{enumerate}
+
+\begin{quote}\itshape
+Les trois consignes du prompt RAG sont \emph{défensives}. Les LLM
+modernes ont tendance à compléter avec leurs connaissances générales —
+en RAG, c'est exactement ce qu'on veut éviter (sinon, à quoi sert le
+retrieval~?). On verra dans l'exercice bonus 3 comment durcir encore
+le prompt.
+\end{quote}
+
+\subsubsection*{Étape 5 — \texttt{StrOutputParser} : extraire le texte}
+
+Le modèle renvoie un \texttt{AIMessage}. Pour récupérer juste le texte
+de la réponse, on ajoute \texttt{| StrOutputParser()} en fin de chaîne.
+C'est le même parseur qu'on utilisait en streaming dans la Phase 1.
+
+\subsection{Vérification dans LangSmith}
+
+L'arbre d'exécution attendu~:
+
+\begin{center}
+\begin{tikzpicture}[every node/.style={font=\footnotesize\ttfamily, anchor=west}]
+  \node                              (a) {RunnableSequence};
+  \node[below=1mm of a, xshift=4mm]  (b) {RunnableParallel<context, question>};
+  \node[below=1mm of b, xshift=4mm]  (c) {[context] RunnableSequence};
+  \node[below=1mm of c, xshift=4mm]  (d) {Retriever ← 1 query embedée};
+  \node[below=1mm of d]              (e) {format\_docs (RunnableLambda)};
+  \node[below=1mm of e, xshift=-4mm] (f) {[question] RunnablePassthrough};
+  \node[below=1mm of f, xshift=-4mm] (g) {ChatPromptTemplate};
+  \node[below=1mm of g]              (h) {ChatAnthropic ← appel LLM};
+  \node[below=1mm of h]              (i) {StrOutputParser};
+\end{tikzpicture}
+\end{center}
+
+Les trois points à regarder~:
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Output du \texttt{Retriever}}~: les chunks ramenés
+        sont-ils pertinents~? Si non, problème côté indexation ou
+        \texttt{k}.
+  \item \textbf{Input du \texttt{ChatAnthropic}}~: le prompt rendu, avec
+        le contexte complet. C'est la \emph{vérité terrain} de ce que le
+        modèle a vu.
+  \item \textbf{Output du \texttt{ChatAnthropic}}~: la réponse cite-t-elle
+        bien les \texttt{[N]}~? Si non, le modèle a peut-être ignoré le
+        contexte (à durcir avec le prompt strict de l'exercice bonus 3).
+\end{enumerate}
+
+\begin{quote}\itshape
+Si la réponse est incorrecte, \textbf{ne blâme pas le modèle d'abord} :
+regarde l'output du retriever. 80\% des bugs RAG viennent d'un mauvais
+retrieval (chunk\_size mal réglé, query mal formulée, k trop petit).
+\end{quote}
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item Pattern canonique RAG~: \texttt{\{context, question\} | prompt |
+        model | parser}.
+  \item Le \textbf{dict implicite} devient un \texttt{RunnableParallel}
+        à deux branches~: une qui va chercher (retriever | format), une
+        qui passe la question.
+  \item \texttt{format\_docs} numérote les chunks et expose les sources —
+        condition pour que le modèle puisse citer.
+  \item Le prompt système doit explicitement~: (1) restreindre au
+        contexte, (2) autoriser le « je ne sais pas », (3) exiger les
+        citations \texttt{[N]}.
+  \item Pour debugger~: lire d'abord l'output du retriever dans
+        LangSmith, ensuite le prompt rendu.
+\end{enumerate}
+\par}
+
+% #####################################################################
+% #####################################################################
+\section{RAG avec sources : récupérer réponse \emph{et} contexte}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice 4. Préserver les documents sources dans la sortie]
+Modifie la chaîne RAG de l'exercice 3 pour qu'elle renvoie un
+\textbf{dict} \texttt{\{"answer": str, "context": list[Document],
+"question": str\}} au lieu de juste la réponse en string. Cela permet
+d'afficher les sources à l'utilisateur et de \emph{vérifier} sur quels
+chunks la réponse s'est appuyée.
+
+\textbf{Contrainte}~: une seule invocation du retriever (pas deux). On
+utilise \texttt{RunnablePassthrough.assign} pour \emph{enrichir} le dict
+au fil de la chaîne sans perdre les clés précédentes.
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Distinguer \texttt{RunnableParallel} (remplace l'input par un
+        dict) de \texttt{RunnablePassthrough.assign} (enrichit le dict).
+  \item Construire une chaîne en \textbf{deux phases}~: récupération du
+        contexte (1 appel retriever), puis génération de la réponse en
+        gardant le contexte en mémoire.
+  \item Comprendre le pattern \emph{fan-out / accumulate} de LCEL.
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\begin{center}
+\begin{tikzpicture}[node distance=5mm and 14mm]
+  \node[data] (q) {"À quoi sert yield ?"};
+
+  \node[parallel, below=of q] (retrieve)
+       {RunnableParallel\\\scriptsize \{context=retriever, question=passthrough\}};
+
+  \node[data, below=of retrieve] (mid)
+       {\{context: [Doc, Doc, Doc],\\\ question: "À quoi sert yield ?"\}};
+
+  \node[block, below=of mid] (assign)
+       {RunnablePassthrough.assign(answer=\dots)};
+
+  \node[data, below=of assign] (out)
+       {\{context: [Doc, Doc, Doc],\\\ question: "À quoi sert yield ?",\\\ answer: "Le mot-clé yield..."\}};
+
+  \draw[flowdata] (q)        -- (retrieve);
+  \draw[flow]     (retrieve) -- (mid)    node[label, midway, right]{1 appel retriever};
+  \draw[flowdata] (mid)      -- (assign);
+  \draw[flow]     (assign)   -- (out)    node[label, midway, right]{1 appel LLM (ajoute "answer")};
+\end{tikzpicture}
+\end{center}
+
+Deux étapes propres~: d'abord on récupère le contexte une seule fois
+(branche \texttt{retrieve}), ensuite on ajoute la réponse au dict
+existant (\texttt{.assign}).
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+from langchain_core.runnables import RunnableParallel, RunnablePassthrough
+
+
+def build_rag_chain_with_sources(retriever):
+    """Chaîne RAG qui renvoie un dict {answer, context, question}."""
+
+    # Étape 1 : récupère le contexte UNE FOIS et le passe en aval
+    retrieve = RunnableParallel(
+        context=retriever,
+        question=RunnablePassthrough(),
+    )
+
+    # Étape 2 : à partir de {context: [Doc...], question: str},
+    # construit la réponse en formatant les docs au passage.
+    answer_chain = (
+        RunnablePassthrough.assign(
+            context=lambda x: format_docs(x["context"]),
+        )
+        | RAG_PROMPT
+        | get_model()
+        | StrOutputParser()
+    )
+
+    # .assign(answer=...) ajoute la clé "answer" sans toucher aux autres.
+    return retrieve | RunnablePassthrough.assign(answer=answer_chain)
+
+
+# Usage
+chain  = build_rag_chain_with_sources(retriever)
+result = chain.invoke("À quoi sert le mot-clé yield exactement ?")
+
+print("RÉPONSE :")
+print(result["answer"])
+
+print("\nSOURCES :")
+for i, doc in enumerate(result["context"], 1):
+    print(f"  [{i}] {doc.metadata['source']}")
+    print(f"      {doc.page_content[:120]}...")
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — Récupérer une seule fois}
+
+\begin{pythoncode}
+retrieve = RunnableParallel(
+    context=retriever,
+    question=RunnablePassthrough(),
+)
+\end{pythoncode}
+
+À partir d'une question (str), ce \texttt{RunnableParallel} produit~:
+\begin{itemize}[leftmargin=*]
+  \item \texttt{context}~: la \texttt{list[Document]} renvoyée par le
+        retriever (\textbf{1 appel}).
+  \item \texttt{question}~: la string d'origine (passthrough).
+\end{itemize}
+
+\textbf{Important}~: on ne formate \emph{pas encore} les docs ici. On
+veut les garder bruts pour pouvoir les retourner à l'utilisateur en
+sortie.
+
+\subsubsection*{Étape 2 — La sous-chaîne qui calcule la réponse}
+
+\begin{pythoncode}
+answer_chain = (
+    RunnablePassthrough.assign(
+        context=lambda x: format_docs(x["context"]),
+    )
+    | RAG_PROMPT | get_model() | StrOutputParser()
+)
+\end{pythoncode}
+
+Cette sous-chaîne reçoit \texttt{\{context: [Doc\dots], question: str\}}
+et fait trois choses~:
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Remplace} la clé \texttt{context} par sa version formatée
+        en string. Le \texttt{RunnablePassthrough.assign(context=\dots)}
+        applique la lambda à l'input courant et place le résultat dans
+        \texttt{context}. La clé \texttt{question} est intacte.
+  \item Le prompt formate avec les variables \texttt{\{context\}} (str
+        maintenant) et \texttt{\{question\}}.
+  \item Modèle + parser produisent la réponse en string.
+\end{enumerate}
+
+\begin{quote}\itshape
+\texttt{RunnablePassthrough.assign(key=fn)} \textbf{remplace} la clé
+\texttt{key} si elle existe déjà, ou la \textbf{crée} si elle n'existe
+pas. C'est l'équivalent d'un \texttt{UPDATE} en SQL sur un dict.
+\end{quote}
+
+\subsubsection*{Étape 3 — L'accumulation finale}
+
+\begin{pythoncode}
+return retrieve | RunnablePassthrough.assign(answer=answer_chain)
+\end{pythoncode}
+
+Le \texttt{RunnablePassthrough.assign(answer=answer\_chain)} prend le
+dict produit par \texttt{retrieve} (\texttt{\{context: [Doc\dots],
+question: str\}}) et y ajoute la clé \texttt{answer} (résultat de
+\texttt{answer\_chain}).
+
+La sortie finale~:
+
+\begin{pythoncode}
+{
+    "context":  [Document, Document, Document, Document],  # bruts, intacts
+    "question": "À quoi sert yield ?",                      # str
+    "answer":   "Le mot-clé yield...",                      # str
+}
+\end{pythoncode}
+
+L'utilisateur peut afficher \texttt{result["answer"]} et énumérer
+\texttt{result["context"]} pour montrer les sources.
+
+\subsubsection*{Étape 4 — Pourquoi pas deux retrievers~?}
+
+Une approche naïve appellerait deux fois le retriever~: une fois pour
+afficher les sources, une fois inclus dans la chaîne RAG. C'est deux
+fois plus de calcul et l'index pourrait même retourner des docs
+différents (selon la non-déterminisme).
+
+Le pattern \texttt{RunnableParallel} + \texttt{.assign}~:
+\begin{itemize}[leftmargin=*]
+  \item \textbf{1 seul appel} retriever (économie).
+  \item \textbf{Cohérence}~: la réponse s'appuie \emph{exactement} sur
+        les sources affichées (pas de divergence possible).
+  \item \textbf{Composable}~: tout reste un \texttt{Runnable}.
+\end{itemize}
+
+\subsection{Vérification dans LangSmith}
+
+L'arbre d'exécution est nettement plus riche~:
+
+\begin{center}
+\begin{tikzpicture}[every node/.style={font=\footnotesize\ttfamily, anchor=west}]
+  \node                              (a) {RunnableSequence};
+  \node[below=1mm of a, xshift=4mm]  (b) {RunnableParallel<context, question>};
+  \node[below=1mm of b, xshift=4mm]  (c) {[context] Retriever};
+  \node[below=1mm of c]              (d) {[question] RunnablePassthrough};
+  \node[below=1mm of d, xshift=-4mm] (e) {RunnableAssign<answer>};
+  \node[below=1mm of e, xshift=4mm]  (f) {RunnableAssign<context=format\_docs>};
+  \node[below=1mm of f]              (g) {ChatPromptTemplate};
+  \node[below=1mm of g]              (h) {ChatAnthropic ← appel LLM};
+  \node[below=1mm of h]              (i) {StrOutputParser};
+\end{tikzpicture}
+\end{center}
+
+\begin{quote}\itshape
+Dans l'onglet \emph{Output} du run racine, tu vois directement le dict
+final avec ses 3 clés. C'est la matérialisation du pattern \emph{fan-out
+/ accumulate} qu'on cherche en LCEL pour produire des sorties riches
+sans dupliquer les calculs.
+\end{quote}
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item \texttt{RunnableParallel} crée un dict ; \texttt{Passthrough.assign}
+        \textbf{enrichit} un dict existant. Ne pas confondre.
+  \item Pattern \emph{fan-out / accumulate}~: une étape construit un
+        dict, les étapes suivantes ajoutent des clés sans détruire les
+        précédentes.
+  \item Une seule invocation du retriever — la réponse et les sources
+        affichées sont cohérentes par construction.
+  \item Pour faire un RAG « professionnel » avec sources, c'est
+        \textbf{le} pattern à connaître.
+\end{enumerate}
+\par}
+
+% #####################################################################
+% #####################################################################
+\section{Recherche \emph{similarity} vs \emph{MMR}}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice 5. Comparer deux stratégies de retrieval]
+Compare deux \texttt{Retriever} sur la même question~: l'un avec
+\texttt{search\_type="similarity"} (par défaut), l'autre avec
+\texttt{search\_type="mmr"} (\emph{Maximal Marginal Relevance}).
+Observe que MMR produit des chunks plus \emph{diversifiés} pour une
+question généraliste comme \emph{« liste vs tuple »}.
+
+\textbf{Contrainte}~: utiliser le même \texttt{Chroma}, juste changer
+\texttt{search\_kwargs}. Pour MMR, expérimenter avec \texttt{fetch\_k}
+(taille de la pool de candidats) et \texttt{lambda\_mult} (équilibre
+similarité/diversité).
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Comprendre le problème de la \emph{redondance sémantique} en
+        retrieval pur par similarité.
+  \item Connaître la \emph{Maximal Marginal Relevance} (MMR) et ses
+        deux paramètres~: \texttt{fetch\_k} et \texttt{lambda\_mult}.
+  \item Savoir choisir entre les deux stratégies selon la nature de la
+        question (précise vs généraliste).
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\begin{center}
+\begin{tikzpicture}[node distance=6mm and 10mm]
+  \node[data] (q) {"liste vs tuple"};
+
+  \node[block, below left=10mm and 8mm of q] (sim)
+       {as\_retriever\\\scriptsize search\_type="similarity"\\\scriptsize k=3};
+  \node[block, below right=10mm and 8mm of q] (mmr)
+       {as\_retriever\\\scriptsize search\_type="mmr"\\\scriptsize k=3, fetch\_k=20, $\lambda$=0.5};
+
+  \node[doc, below=of sim] (simout) {top 3 par cosinus\\\scriptsize (souvent redondants)};
+  \node[doc, below=of mmr] (mmrout) {3 chunks diversifiés\\\scriptsize (parmi 20 candidats)};
+
+  \draw[flowdata] (q)   -- (sim);
+  \draw[flowdata] (q)   -- (mmr);
+  \draw[flow]     (sim) -- (simout);
+  \draw[flow]     (mmr) -- (mmrout);
+\end{tikzpicture}
+\end{center}
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+vectorstore = build_or_load_vectorstore()
+question = "Quelle est la différence entre une liste et un tuple ?"
+
+# --- Retriever similarity (défaut) ---
+sim_retriever = vectorstore.as_retriever(
+    search_type="similarity",
+    search_kwargs={"k": 3},
+)
+
+# --- Retriever MMR ---
+mmr_retriever = vectorstore.as_retriever(
+    search_type="mmr",
+    search_kwargs={
+        "k": 3,                    # nombre final de docs renvoyés
+        "fetch_k": 20,             # pool de candidats avant sélection MMR
+        "lambda_mult": 0.5,        # 1.0 = pure similarité, 0.0 = pure diversité
+    },
+)
+
+# --- Comparaison ---
+print("--- Top-3 similarity ---")
+for i, doc in enumerate(sim_retriever.invoke(question), 1):
+    print(f"  [{i}] {doc.page_content[:100]}...")
+
+print("\n--- Top-3 MMR (diversifié) ---")
+for i, doc in enumerate(mmr_retriever.invoke(question), 1):
+    print(f"  [{i}] {doc.page_content[:100]}...")
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — Le problème de la similarité pure}
+
+La similarité cosinus classe les chunks par \textbf{proximité avec la
+query}, indépendamment les uns des autres. Conséquence~: si la query
+matche fortement un certain passage, les \texttt{k} chunks les plus
+similaires sont souvent \textbf{très proches entre eux}~:
+
+\begin{quote}\itshape
+Pour la query \emph{« liste vs tuple »}, les top-3 par similarité sont
+typiquement 3 paragraphes de la \emph{même section} qui parlent de la
+même définition formelle. On rate les autres angles du sujet (mutabilité,
+performances, conventions d'usage).
+\end{quote}
+
+\subsubsection*{Étape 2 — La \emph{Maximal Marginal Relevance}}
+
+MMR sélectionne itérativement les chunks en équilibrant deux critères~:
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Pertinence}~: similarité avec la query.
+  \item \textbf{Diversité}~: \emph{dissimilarité} avec les chunks déjà
+        sélectionnés.
+\end{itemize}
+
+Algorithme~:
+\begin{enumerate}[leftmargin=*]
+  \item Récupérer les \texttt{fetch\_k} candidats par similarité pure
+        (ex: 20).
+  \item Sélectionner le candidat le plus proche de la query (top 1).
+  \item Pour chaque candidat restant, calculer~:
+        \[
+        \text{score} = \lambda \cdot \text{sim}(c, q)
+                     - (1-\lambda) \cdot \max_{s \in S} \text{sim}(c, s)
+        \]
+        où \(S\) est l'ensemble des candidats déjà sélectionnés.
+  \item Sélectionner le candidat de plus haut score. Répéter jusqu'à
+        \texttt{k}.
+\end{enumerate}
+
+\subsubsection*{Étape 3 — Les paramètres \texttt{fetch\_k} et
+\texttt{lambda\_mult}}
+
+\begin{center}
+\begin{tabular}{p{4cm} p{10cm}}
+\toprule
+\textbf{Paramètre} & \textbf{Effet} \\
+\midrule
+\texttt{k} & Nombre final de docs renvoyés. \\[1mm]
+\texttt{fetch\_k} & Taille de la pool de candidats sur laquelle MMR
+opère. Plus c'est grand, plus la diversité \emph{potentielle} est large.
+Typique~: \texttt{fetch\_k = 5 \(\times\) k}. \\[1mm]
+\texttt{lambda\_mult} & Curseur similarité $\leftrightarrow$ diversité~:
+\texttt{1.0} = MMR redevient similarité pure, \texttt{0.0} = pure
+diversité (déconnectée de la query). Sweet spot~: \texttt{0.5} à
+\texttt{0.7}. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection*{Étape 4 — Quand utiliser MMR}
+
+\begin{center}
+\begin{tabular}{p{6.5cm} p{6.5cm}}
+\toprule
+\textbf{\texttt{similarity} (défaut)} & \textbf{\texttt{mmr}} \\
+\midrule
+Question précise, monolithique
+& Question généraliste, multifacette \\[1mm]
+« Comment fonctionne \texttt{super()} ? »
+& « C'est quoi la POO en Python ? » \\[1mm]
+On veut le \emph{meilleur} match exact
+& On veut un \emph{tour d'horizon} \\[1mm]
+Plus rapide (pas de recalcul)
+& Plus lent ($O(k \times \text{fetch\_k})$) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{quote}\itshape
+\textbf{Règle pratique}~: si tes top-3 par similarité semblent
+\emph{redondants} (3 passages disant la même chose), passe en MMR. Si
+les top-3 sont déjà variés, similarité suffit (et c'est plus rapide).
+\end{quote}
+
+\subsection{Vérification dans LangSmith}
+
+Pour les deux retrievers, LangSmith affiche le même type de run
+(\texttt{VectorStoreRetriever}). La différence se voit dans le
+\emph{contenu} des chunks renvoyés~: tu compares visuellement les deux
+runs côte-à-côte dans l'UI.
+
+\begin{quote}\itshape
+LangSmith n'expose pas (encore) les scores MMR internes. Si tu veux les
+inspecter, utilise \texttt{vectorstore.max\_marginal\_relevance\_search\_with\_score(\dots)}
+directement, en dehors de la chaîne.
+\end{quote}
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item La similarité pure peut être \textbf{redondante}~: les top-\texttt{k}
+        sont souvent des paragraphes proches du même passage.
+  \item MMR équilibre \textbf{pertinence et diversité}~: pioche dans une
+        pool de \texttt{fetch\_k} candidats les \texttt{k} les plus
+        complémentaires.
+  \item \texttt{lambda\_mult} pilote le curseur~: \texttt{0.5}--\texttt{0.7}
+        est le sweet spot pour de la doc technique.
+  \item Bascule en MMR pour les questions \textbf{généralistes ou
+        ouvertes}~; reste en similarity pour les questions précises.
+  \item Côté API~: c'est juste un paramètre \texttt{search\_type} à
+        changer dans \texttt{.as\_retriever(\dots)}.
+\end{enumerate}
+\par}
+
+\end{document}
