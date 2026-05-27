@@ -355,7 +355,7 @@ if __name__ == "__main__":
     demo_buggy_code()
     demo_multi_tool()
     # Décommente pour passer en mode chat interactif :
-    # chat_loop()
+    chat_loop()
 
 
 # ============================================================================

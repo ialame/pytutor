@@ -15,6 +15,7 @@
 
 % Glyphes Unicode utilisés dans le code Python copié-collé
 \DeclareUnicodeCharacter{2713}{\textbf{V}}    % ✓
+\DeclareUnicodeCharacter{2717}{\textbf{X}}    % ✗
 \DeclareUnicodeCharacter{2192}{$\rightarrow$} % →
 \DeclareUnicodeCharacter{2500}{-}             % ─ box drawing
 \DeclareUnicodeCharacter{276F}{>}             % ❯
@@ -92,6 +93,10 @@
     draw=violet!60!black, fill=violet!10, minimum width=30mm, minimum height=12mm,
     align=center, font=\small
   },
+  schema/.style={
+    rectangle, rounded corners=2pt, draw=teal!60!black, fill=teal!8,
+    minimum width=48mm, minimum height=9mm, align=center, font=\small
+  },
   msgblock/.style={
     rectangle, rounded corners=1pt, draw=purple!60!black, fill=purple!6,
     minimum width=58mm, minimum height=7mm, align=left, font=\scriptsize\ttfamily
@@ -103,7 +108,7 @@
 
 % ---------- Titre ----------
 \title{\textbf{Phase 3 — L'agent PyTutor}\\
-\large Quatre concepts essentiels~: \texttt{@tool}, \texttt{create\_agent}, boucle ReAct, mémoire conversationnelle}
+\large Quatre concepts essentiels + cinq exercices pour aller plus loin}
 \author{Cours PyTutor2}
 \date{}
 
@@ -120,11 +125,17 @@ contrat avec le LLM, la construction de l'agent avec
 sur trois démos contrastées, et la gestion de la mémoire
 conversationnelle pour un chat multi-tour. Chaque exercice suit la
 structure habituelle (énoncé + objectifs en boîte, solution détaillée,
-vérification LangSmith, récapitulatif).
+vérification LangSmith, récapitulatif). Une seconde partie
+\emph{« Pour aller plus loin »} prolonge avec cinq exercices avancés sur
+les agents~: ajouter un tool dynamique, observer un agent dans LangSmith,
+paramétrer le \texttt{timeout} d'un tool, composer un tool avec un
+sous-LLM, et streamer la réponse en deux modes.
 \end{abstract}
 
 \tableofcontents
 \bigskip
+
+\part{Exercices}
 
 % #####################################################################
 % #####################################################################
@@ -1003,6 +1014,236 @@ Trois choix d'affichage~:
         d'un coup d'œil.
 \end{itemize}
 
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+DEMO 1 -- Question factuelle
+======================================================================
+[OK] Rechargement de l'index depuis ./chroma_db
+
+[USER]:
+  A quoi sert exactement le mot-clé `yield` ?
+
+[AI]:
+  Je vais chercher la documentation officielle pour te donner une
+  explication précise.
+  -> tool_use: search_python_docs({'query': 'yield keyword
+                                              generator'})
+
+[TOOL search_python_docs]:
+     Source: https://docs.python.org/3/howto/functional.html
+     are messy. In Python 2.5 there's a simple way to pass values
+     into a generator. yield became an expression, returning a
+     value that can be assigned to a variable or otherwise operated
+     on: val = (yield i) ...
+
+[AI]:
+  Parfait ! Voici l'explication :
+
+  ## Le mot-clé `yield`
+  **`yield` sert à créer des générateurs** -- des fonctions qui
+  produisent une séquence de valeurs **une à la fois**, sans tout
+  charger en mémoire d'un coup.
+
+  ### Différence clé avec `return`
+  - **`return`** : termine la fonction et retourne une valeur
+  - **`yield`** : **suspend** la fonction, retourne une valeur, et
+    **mémorise l'état** pour reprendre plus tard
+
+  -> tool_use: run_python_code({...comparaison classique/yield...})
+
+[TOOL run_python_code]:
+     STDOUT:
+     === Approche classique ===
+     Type : <class 'list'>
+     Contenu : [0, 1, 2, 3, 4]
+
+     === Approche avec yield ===
+     Type : <class 'generator'>
+     Contenu : <generator object nombres_generateur at 0x1029af780>
+     Valeurs du générateur :
+     0
+     1
+     2
+     3
+     4
+     Exit code: 0
+
+[AI]:
+  ### Avantages des générateurs
+  1. **Economie de mémoire** : les valeurs sont générées à la
+     demande, pas stockées
+  2. **Paresse** (lazy evaluation) : utile pour les grandes
+     séquences ou infinies
+  3. **Lisibilité** : code plus simple et naturel
+
+  -> tool_use: run_python_code({...comparaison taille mémoire...})
+
+[TOOL run_python_code]:
+     STDOUT:
+     Taille d'une liste de 1M nombres : 8000056 bytes
+     Taille d'un générateur : 192 bytes
+     Exit code: 0
+
+[AI]:
+  Enorme différence !
+
+  ### Résumé
+  | Aspect      | `return`         | `yield`            |
+  |-------------|------------------|--------------------|
+  | Retourne    | Une valeur unique| Un générateur      |
+  | Mémoire     | Tout en mémoire  | A la demande       |
+  | Reprendre ? | Non, terminée    | Oui, état préservé |
+  | Cas d'usage | Résultat unique  | Séquences          |
+
+  Source : Documentation Python officielle - Generators
+
+======================================================================
+DEMO 2 -- Debugging d'un code qui boucle
+======================================================================
+
+[USER]:
+  Mon code ne se termine jamais. Tu peux m'aider ?
+
+  ```python
+  def double_each(numbers):
+      for n in numbers:
+          numbers.append(n * 2)
+      return numbers
+
+  print(double_each([1, 2, 3]))
+  ```
+
+[AI]:
+  Je vais exécuter ton code pour voir ce qui se passe :
+  -> tool_use: run_python_code({'code': '...'})
+
+[TOOL run_python_code]:
+     ERREUR: timeout après 5 secondes. Le code boucle probablement
+     à l'infini (boucle while, génération récursive sans condition
+     d'arrêt, etc.)
+
+[AI]:
+  Exactement ! Ton code crée une **boucle infinie**. Voici pourquoi :
+
+  ## Le problème
+  Tu modifies la liste **pendant que tu la parcours** :
+    Iteration 1 : n=1, append(2)   -> [1, 2, 3, 2]
+    Iteration 2 : n=2, append(4)   -> [1, 2, 3, 2, 4]
+    Iteration 3 : n=3, append(6)   -> [1, 2, 3, 2, 4, 6]
+    Iteration 4 : n=2, append(4)   -> [1, 2, 3, 2, 4, 6, 4]  <- continue !
+
+  ## La solution
+  **Option 1 : Créer une nouvelle liste**
+  ```python
+  def double_each(numbers):
+      result = []
+      for n in numbers:
+          result.append(n * 2)
+      return result
+  ```
+
+  **Option 2 : Parcourir une copie**
+  ```python
+  def double_each(numbers):
+      for n in numbers[:]:  # [:] crée une copie
+          numbers.append(n * 2)
+      return numbers
+  ```
+
+  **Option 3 : List comprehension (plus pythonique)**
+  ```python
+  def double_each(numbers):
+      return [n * 2 for n in numbers]
+  ```
+
+======================================================================
+DEMO 3 -- Multi-tool (explication + exercice)
+======================================================================
+
+[USER]:
+  Explique-moi les list comprehensions en t'appuyant sur la doc,
+  puis génère-moi un exercice de niveau intermédiaire pour pratiquer.
+
+[AI]:
+  Je vais d'abord consulter la documentation officielle sur les
+  list comprehensions, puis je te générerai un exercice.
+  -> tool_use: search_python_docs({'query': 'list comprehensions'})
+  -> tool_use: generate_exercise({'topic': 'list comprehensions',
+                                  'difficulty': 'intermédiaire'})
+
+[TOOL search_python_docs]:
+     Source: https://docs.python.org/3/tutorial/datastructures.html
+     For example, assume we want to create a list of squares, like:
+     >>> squares = []
+     >>> for x in range(10):
+     ...     squares.append(x ** 2)
+     >>> squares
+     [0, 1, 4, 9, 16, 25, 36, 49, 64, 81]
+     Note that this creates (or overwrites) a vari...
+
+[TOOL generate_exercise]:
+     Exercice sur 'list comprehensions' (niveau intermédiaire) :
+     Code de référence :
+     # Approche classique avec une boucle
+     nombres = [1, 2, 3, 4, 5]
+     carres_classique = []
+     for n in nombres:
+         carres_classique.append(n ** 2)
+     # Approche avec list comprehension
+     carres = [n ** 2 for n in...
+
+[AI]:
+  ## Les List Comprehensions expliquées
+
+  Une **list comprehension** est une syntaxe compacte pour créer une
+  liste. Selon la doc, elle se compose de :
+  - Des **crochets** `[ ]`
+  - Une **expression** à évaluer
+  - Une ou plusieurs **clauses `for`**
+  - Zéro ou plusieurs **clauses `if`** (optionnelles)
+
+  **Syntaxe générale :**
+  ```python
+  [expression for variable in iterable if condition]
+  ```
+
+  ### Exemples clés
+  **1. Avec une condition (filtrage) :**
+  ```python
+  [x for x in range(10) if x % 2 == 0]   # [0, 2, 4, 6, 8]
+  ```
+
+  **2. Avec plusieurs boucles (produit cartésien) :**
+  ```python
+  [(x, y) for x in [1, 2, 3] for y in [3, 1, 4] if x != y]
+  ```
+
+  ## Exercice de niveau intermédiaire
+  **Q1.** Qu'est-ce qu'une list comprehension et quel est son
+  avantage par rapport à une boucle for classique ?
+
+  **Q2.** Ecris une list comprehension qui crée une liste contenant
+  les carrés des nombres pairs de 1 à 10.
+
+  **Q3.** Pourquoi serait-il mauvais d'utiliser une list comprehension
+  pour une transformation très complexe impliquant plusieurs
+  conditions imbriquées et appels de fonctions ?
+
+  Piège classique à éviter :
+   - Confondre l'ordre : `[for x in liste expression]` (FAUX)
+   - Bon ordre        : `[expression for x in liste]` (CORRECT)
+\end{verbatim}
+\end{tcolorbox}
+
 \subsection{Vérification dans LangSmith}
 
 LangSmith trace chaque agent run avec une visualisation arborescente~:
@@ -1304,5 +1545,1497 @@ tours, c'est édifiant.
         ligne vide.
 \end{enumerate}
 \par}
+
+\part{Pour aller plus loin}
+
+% #####################################################################
+% #####################################################################
+\section{Ajouter un cinquième tool à l'agent}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice bonus 1. Étendre l'inventaire de tools en une fonction]
+Écris un tool \texttt{current\_python\_version()} qui renvoie la version
+de Python utilisée par le processus, et ajoute-le à l'agent PyTutor.
+Vérifie ensuite avec une question genre \emph{« Quelle version utilises-tu~?
+Est-ce que je peux utiliser \texttt{match}/\texttt{case}~? »}.
+
+\textbf{Contrainte}~: la docstring du tool doit mentionner les cas
+d'usage typiques (compatibilité, features par version~: \texttt{match} en
+3.10, \texttt{ExceptionGroup} en 3.11, etc.) pour que le LLM sache
+\emph{quand} l'appeler.
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Mesurer la \textbf{trivialité} de l'ajout d'un tool une fois
+        que l'agent est construit~: une fonction \texttt{@tool}, et
+        on l'ajoute à la liste.
+  \item Comprendre que le modèle découvre le nouveau tool
+        \textbf{automatiquement} via son nom et sa docstring — pas de
+        configuration explicite.
+  \item Voir le rôle des cas d'usage dans la docstring~: c'est ce qui
+        déclenche (ou pas) l'appel du tool selon la question.
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\begin{center}
+\begin{tikzpicture}[node distance=5mm and 10mm]
+  \node[llm] (model) {Modèle LLM};
+
+  \node[tool, below left=14mm and 22mm of model]  (t1) {search\_python\_docs};
+  \node[tool, below left=14mm and  4mm of model]  (t2) {run\_python\_code};
+  \node[tool, below right=14mm and  4mm of model] (t3) {generate\_exercise};
+  \node[tool, below right=14mm and 22mm of model] (t4) {check\_pep8};
+  \node[tool, below=24mm of model, fill=orange!15, draw=orange!70!black] (t5)
+       {current\_python\_version\\\scriptsize \textbf{(nouveau)}};
+
+  \draw[flow] (model) -- (t1);
+  \draw[flow] (model) -- (t2);
+  \draw[flow] (model) -- (t3);
+  \draw[flow] (model) -- (t4);
+  \draw[flow, draw=orange!70!black] (model) -- (t5) node[label, midway, right]{ajouté};
+\end{tikzpicture}
+\end{center}
+
+Un cinquième tool s'ajoute sans modification du reste~: même
+\texttt{system\_prompt}, même \texttt{model}, même architecture
+LangGraph. Le modèle, à l'invocation, voit 5 tools dans son contrat au
+lieu de 4.
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+import sys
+from langchain.agents import create_agent
+from langchain_core.tools import tool
+from langchain_core.messages import HumanMessage
+from config import get_model
+from phase3_agent import TOOLS, SYSTEM_PROMPT, print_trace
+
+
+@tool
+def current_python_version() -> str:
+    """Renvoie la version Python du processus qui exécute PyTutor.
+
+    À utiliser quand l'élève pose des questions sur la compatibilité, les
+    features récentes (match/case en 3.10, ExceptionGroup en 3.11, etc.),
+    ou simplement quand il demande quelle version est utilisée.
+    """
+    return f"Python {sys.version.split()[0]} ({sys.platform})"
+
+
+def exercise_1() -> None:
+    # On rajoute simplement le nouveau tool à la liste existante.
+    agent = create_agent(
+        model=get_model(),
+        tools=TOOLS + [current_python_version],
+        system_prompt=SYSTEM_PROMPT,
+    )
+
+    result = agent.invoke({
+        "messages": [HumanMessage(content=(
+            "Quelle version de Python utilises-tu pour exécuter mon code ? "
+            "Est-ce que je peux utiliser le pattern matching avec `match` / `case` ?"
+        ))]
+    })
+    print_trace(result["messages"])
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — La fonction Python décorée}
+
+Un tool n'a besoin que de trois choses~: un décorateur \texttt{@tool},
+une signature typée, une docstring~:
+
+\begin{pythoncode}
+@tool
+def current_python_version() -> str:
+    """Renvoie la version Python..."""
+    return f"Python {sys.version.split()[0]} ({sys.platform})"
+\end{pythoncode}
+
+\textbf{Sans argument}~: la signature \texttt{() -> str} est minimale.
+Le LLM n'a rien à fournir en entrée, juste à décider d'appeler le tool.
+
+\subsubsection*{Étape 2 — L'ajout à la liste \texttt{tools}}
+
+\begin{pythoncode}
+tools=TOOLS + [current_python_version]
+\end{pythoncode}
+
+C'est tout. Aucun re-enregistrement, aucune configuration. Le nouveau
+tool est passé à \texttt{create\_agent} qui l'injecte dans le contrat
+du LLM.
+
+\begin{quote}\itshape
+\textbf{Pattern de composition}~: importer la liste \texttt{TOOLS} de
+\texttt{phase3\_agent.py} et la combiner avec de nouveaux tools évite
+de dupliquer la définition de l'agent. C'est l'équivalent d'une
+\emph{extension} en orienté-objet, mais en plus simple~: juste de la
+concaténation de listes.
+\end{quote}
+
+\subsubsection*{Étape 3 — La docstring déclenche l'usage}
+
+La docstring liste des cas d'usage spécifiques~:
+\begin{itemize}[leftmargin=*]
+  \item « questions sur la compatibilité » — déclenche l'appel quand
+        l'utilisateur demande s'il peut utiliser \texttt{walrus} ou autre
+        feature récente.
+  \item « features récentes (match/case en 3.10\dots) » — donne au LLM
+        des \emph{exemples concrets} de questions qui doivent y mener.
+  \item « ou simplement quand il demande quelle version » — couvre le
+        cas direct.
+\end{itemize}
+
+\subsubsection*{Étape 4 — Le comportement attendu de l'agent}
+
+Sur la question test :
+\emph{« Quelle version de Python utilises-tu~? Est-ce que je peux
+utiliser \texttt{match}~/~\texttt{case}~? »}
+
+L'agent devrait~:
+\begin{enumerate}[leftmargin=*]
+  \item Appeler \texttt{current\_python\_version()}.
+  \item Observer la sortie (par exemple \texttt{"Python 3.11.4 (darwin)"}).
+  \item Répondre en mentionnant que \texttt{match/case} (PEP 634) est
+        disponible depuis Python 3.10, et donc utilisable.
+\end{enumerate}
+
+\begin{quote}\itshape
+Si l'agent n'appelle PAS le tool, c'est que la docstring n'est pas
+assez explicite. Reformule-la pour ajouter le mot-clé qui correspond à
+la question (par exemple, ajouter « pattern matching, match, case »
+parmi les cas d'usage).
+\end{quote}
+
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 1 -- Ajout d'un tool current_python_version()
+======================================================================
+
+[USER]:
+  Quelle version de Python utilises-tu pour exécuter mon code ?
+  Est-ce que je peux utiliser le pattern matching avec
+  `match` / `case` ?
+
+[AI]:
+  Je vais vérifier la version de Python utilisée.
+  -> tool_use: current_python_version({})
+
+[TOOL current_python_version]:
+     Python 3.12.7 (darwin)
+
+[AI]:
+  Excellente nouvelle !
+
+  Je utilise **Python 3.12.7**, ce qui signifie que **oui, tu peux
+  tout à fait utiliser le pattern matching avec `match` / `case`** !
+
+  Le pattern matching a été introduit en **Python 3.10**, donc tu as
+  accès à cette fonctionnalité. Voici un petit exemple pour te
+  montrer que ça fonctionne :
+
+  -> tool_use: run_python_code({'code':
+       'def classifier_nombre(n):\n'
+       '    match n:\n'
+       '        case 0: return "zéro"\n'
+       '        case 1: return "un"\n'
+       '        case 2: return "deux"\n'
+       '        case _: return "autre nombre"\n'
+       'print(classifier_nombre(0))\n'
+       'print(classifier_nombre(1))\n'
+       'print(classifier_nombre(5))'})
+
+[TOOL run_python_code]:
+     STDOUT:
+     zéro
+     un
+     autre nombre
+     Exit code: 0
+
+[AI]:
+  Parfait ! Comme tu vois, le pattern matching fonctionne sans
+  problème. Tu peux utiliser :
+   - Les **patterns simples** (valeurs littérales)
+   - Les **patterns structurels** (tuples, listes, dictionnaires)
+   - Les **patterns avec gardes** (conditions supplémentaires
+     avec `if`)
+   - Le **wildcard** `_` pour capturer n'importe quoi
+\end{verbatim}
+\end{tcolorbox}
+
+\subsection{Vérification dans LangSmith}
+
+L'arbre d'exécution doit montrer~:
+
+\begin{center}
+\begin{tikzpicture}[every node/.style={font=\footnotesize\ttfamily, anchor=west}]
+  \node                              (a) {agent (LLM, tour 1)};
+  \node[below=1mm of a, xshift=4mm]  (b) {Output : tool\_calls = [\{current\_python\_version\}]};
+  \node[below=1mm of b, xshift=-4mm] (c) {tools (ToolNode)};
+  \node[below=1mm of c, xshift=4mm]  (d) {current\_python\_version() $\rightarrow$ "Python 3.11.4..."};
+  \node[below=1mm of d, xshift=-4mm] (e) {agent (LLM, tour 2)};
+  \node[below=1mm of e, xshift=4mm]  (f) {Output : "J'utilise Python 3.11. match/case est..."};
+\end{tikzpicture}
+\end{center}
+
+Vérifie aussi l'\emph{Input} du premier appel LLM~: les \textbf{5 tools}
+doivent être listés dans le schéma envoyé, dont \texttt{current\_python\_version}
+avec sa docstring.
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item Ajouter un tool est \textbf{trivial}~: une fonction
+        \texttt{@tool}, et on l'append à la liste passée à
+        \texttt{create\_agent}.
+  \item Pattern de composition~: \texttt{tools=TOOLS + [new\_tool]} évite
+        la duplication.
+  \item La docstring est le \textbf{seul} levier pour orienter le modèle
+        sur le \emph{quand}-utiliser. Soigner les cas d'usage explicites.
+  \item Si le modèle n'appelle pas le tool attendu~: c'est presque
+        toujours un problème de docstring, pas de logique.
+\end{enumerate}
+\par}
+
+% #####################################################################
+% #####################################################################
+\section{LangSmith pour observer un agent}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice bonus 2. Tracer la boucle ReAct dans l'UI LangSmith]
+Configure LangSmith (variables d'environnement \texttt{LANGCHAIN\_TRACING\_V2},
+\texttt{LANGCHAIN\_API\_KEY}, \texttt{LANGCHAIN\_PROJECT}) et exécute
+l'agent sur une question \textbf{multi-tool} pour obtenir une trace
+riche. Ouvre la trace dans l'UI et explore l'arbre d'exécution.
+
+\textbf{Contrainte}~: l'exercice doit vérifier programmatiquement la
+présence des variables d'env et afficher un mode d'emploi clair si la
+config manque.
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Configurer LangSmith pour le suivi d'un agent (variables
+        spécifiques \texttt{LANGCHAIN\_*}).
+  \item Lire l'arbre d'exécution d'un agent dans l'UI~: nœuds
+        \texttt{agent} / \texttt{tools}, prompts exacts, tokens
+        consommés, latence.
+  \item Comprendre que \emph{l'agent n'a pas de mémoire magique}~: c'est
+        l'historique qui s'accumule et est repassé au modèle à chaque
+        tour. LangSmith le rend visible.
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\begin{center}
+\begin{tikzpicture}[node distance=5mm and 14mm]
+  \node[data] (env) {.env\\\scriptsize LANGCHAIN\_TRACING\_V2=true\\\scriptsize LANGCHAIN\_API\_KEY=...\\\scriptsize LANGCHAIN\_PROJECT=PyTutor2};
+  \node[block, below=of env] (agent) {agent.invoke(\dots)};
+
+  \node[block, right=24mm of agent] (api) {API LangSmith};
+  \node[store, above=of api] (cloud) {smith.langchain.com\\\scriptsize traces persistées};
+
+  \draw[flowdata] (env)   -- (agent);
+  \draw[flow]     (agent) -- (api) node[label, midway, above]{tous les nœuds tracés};
+  \draw[flow]     (api)   -- (cloud);
+\end{tikzpicture}
+\end{center}
+
+Quand \texttt{LANGCHAIN\_TRACING\_V2=true} et qu'une clé API valide est
+présente, \emph{chaque} \texttt{Runnable} et \emph{chaque} appel LLM
+sont automatiquement envoyés à LangSmith. Aucun changement de code
+nécessaire.
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+import os
+from langchain_core.messages import HumanMessage
+from phase3_agent import build_agent
+
+
+def exercise_2_langsmith() -> None:
+    # --- Vérification de la configuration ---
+    tracing = os.getenv("LANGCHAIN_TRACING_V2", "").lower() in {"true", "1"}
+    api_key = os.getenv("LANGCHAIN_API_KEY")
+    project = os.getenv("LANGCHAIN_PROJECT", "default")
+
+    print(f"LANGCHAIN_TRACING_V2 : {'V' if tracing else 'X'}")
+    print(f"LANGCHAIN_API_KEY    : {'V' if api_key else 'X'}")
+    print(f"LANGCHAIN_PROJECT    : {project}")
+
+    if not (tracing and api_key):
+        print("-> Configure ces variables dans ton .env puis relance.")
+        return
+
+    # --- Exécution d'un agent multi-tool pour une trace riche ---
+    agent = build_agent()
+    agent.invoke({
+        "messages": [HumanMessage(content=(
+            "Cherche dans la doc ce qu'est un dictionnaire en Python, "
+            "puis génère un exercice débutant sur ce sujet, "
+            "et vérifie que le code de référence est PEP 8 compliant."
+        ))]
+    })
+    print(f"-> Trace envoyée. Ouvre https://smith.langchain.com (projet '{project}').")
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — Les variables d'environnement LangSmith}
+
+\begin{center}
+\begin{tabular}{p{5cm} p{9cm}}
+\toprule
+\textbf{Variable} & \textbf{Rôle} \\
+\midrule
+\texttt{LANGCHAIN\_TRACING\_V2}
+& \texttt{"true"} pour activer l'envoi automatique des traces. Sans ça,
+les chaînes/agents s'exécutent normalement, rien n'est envoyé. \\[1mm]
+\texttt{LANGCHAIN\_API\_KEY}
+& Clé personnelle créée sur \texttt{smith.langchain.com} (commence par
+\texttt{lsv2\_pt\_\dots}). \\[1mm]
+\texttt{LANGCHAIN\_PROJECT}
+& Nom du projet où grouper les traces. Ex.~: \texttt{"PyTutor2"}. \\[1mm]
+\texttt{LANGCHAIN\_ENDPOINT} & Optionnel.
+\texttt{https://eu.api.smith.langchain.com} pour un compte EU. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{quote}\itshape
+\textbf{Note de nommage}~: les variables historiques sont préfixées
+\texttt{LANGCHAIN\_} ; la nouvelle version unifiée est préfixée
+\texttt{LANGSMITH\_}. Les deux sont reconnues. Cohérence avec le reste
+du projet recommandée.
+\end{quote}
+
+\subsubsection*{Étape 2 — Une question \textbf{multi-tool} pour une trace riche}
+
+Pour avoir une trace pédagogiquement intéressante, choisis une question
+qui force l'agent à enchaîner plusieurs tools~:
+
+\begin{quote}\itshape
+\emph{« Cherche dans la doc ce qu'est un dictionnaire en Python, puis
+génère un exercice débutant sur ce sujet, et vérifie que le code de
+référence est PEP 8 compliant. »}
+\end{quote}
+
+Cette question demande explicitement~:
+\begin{enumerate}[leftmargin=*]
+  \item \texttt{search\_python\_docs} (« cherche dans la doc »).
+  \item \texttt{generate\_exercise} (« génère un exercice »).
+  \item \texttt{check\_pep8} (« vérifie PEP 8 »).
+\end{enumerate}
+
+L'agent va donc faire \textbf{3 itérations} de la boucle ReAct, ce qui
+donne une trace très lisible.
+
+\subsubsection*{Étape 3 — Ce qu'on voit dans l'UI LangSmith}
+
+Dans \texttt{smith.langchain.com}, dans ton projet~:
+
+\begin{enumerate}[leftmargin=*]
+  \item Une trace nommée \texttt{LangGraph} apparaît~: l'agent
+        \emph{est} un graphe LangGraph.
+  \item L'\textbf{arbre d'exécution} montre l'alternance
+        \texttt{agent} (LLM) / \texttt{tools} (ToolNode) sur 3 cycles.
+  \item Chaque \texttt{agent} (model call) expose~:
+        \begin{itemize}
+        \item \emph{Input} : système + historique + schémas des tools.
+        \item \emph{Output} : la décision (tool\_calls) ou la réponse
+              finale.
+        \end{itemize}
+  \item Chaque \texttt{tools} expose les noms des tools appelés, leurs
+        arguments, et leurs sorties intégrales.
+  \item Tokens et latence \emph{par appel} sont visibles, agrégés sur
+        la trace racine.
+\end{enumerate}
+
+\subsubsection*{Étape 4 — L'insight clé : l'historique grossit}
+
+\begin{quote}\itshape
+À chaque tour du modèle, regarde l'onglet \emph{Input} dans la trace.
+Tu vois \textbf{tout l'historique précédent} qui est repassé au LLM.
+L'agent n'a pas de mémoire magique~: c'est juste l'historique qui
+grossit, et que LangChain repasse à chaque appel. C'est aussi pourquoi
+le coût en tokens d'entrée augmente à chaque tour.
+\end{quote}
+
+\subsection{Vérification dans LangSmith}
+
+\emph{(Cet exercice EST la vérification.)}
+
+Quatre choses à pointer dans la trace pour bien comprendre~:
+
+\begin{itemize}[leftmargin=*]
+  \item L'\textbf{alternance} \texttt{agent} $\to$ \texttt{tools} $\to$
+        \texttt{agent} $\to$ \dots
+  \item Le \emph{même} \texttt{system\_prompt} en tête de chaque appel
+        \texttt{agent} (constant).
+  \item L'\emph{historique qui grandit} dans l'input de chaque appel
+        \texttt{agent}.
+  \item La \textbf{dernière} étape : un \texttt{agent} qui produit un
+        \texttt{Output} \textbf{sans} \texttt{tool\_calls} — c'est la
+        réponse finale.
+\end{itemize}
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item 3 variables d'env~: \texttt{LANGCHAIN\_TRACING\_V2=true},
+        \texttt{LANGCHAIN\_API\_KEY=\dots},
+        \texttt{LANGCHAIN\_PROJECT=\dots}.
+  \item Tracing automatique~: aucune modification de code une fois
+        activé.
+  \item Une trace d'agent montre l'\textbf{alternance}
+        agent/tools/agent\dots\ jusqu'à la décision finale.
+  \item L'historique grossit visible dans l'\emph{Input} de chaque
+        appel LLM successif. C'est l'observation pédagogique
+        fondamentale.
+  \item LangSmith expose tokens et latence par appel, agrégés sur la
+        trace racine~: indispensable pour optimiser un agent.
+\end{enumerate}
+\par}
+
+% #####################################################################
+% #####################################################################
+\section{Tool avec paramètre \texttt{timeout} configurable}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice bonus 3. Exposer un paramètre par défaut au modèle]
+Modifie \texttt{run\_python\_code} pour accepter un paramètre
+\texttt{timeout\_seconds: int = 5}. La docstring doit guider le modèle
+sur \emph{quand} surcharger la valeur par défaut (calcul long manifeste)
+et \emph{quand pas} (la majorité des cas). Teste avec deux scénarios~:
+un code rapide et un code volontairement long.
+
+\textbf{Contrainte}~: le timeout doit être \emph{clampé} côté serveur
+($1 \leq t \leq 60$ secondes) pour empêcher des valeurs absurdes.
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Comprendre que les paramètres avec valeur par défaut sont
+        \textbf{exposés au modèle} dans le schéma JSON du tool.
+  \item Voir comment la docstring conditionne la décision du modèle
+        d'override ou non.
+  \item Mettre en place une \textbf{défense en profondeur}~: une
+        consigne dans la docstring \emph{plus} un clamping côté code.
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\begin{center}
+\begin{tikzpicture}[node distance=5mm and 12mm]
+  \node[llm] (model) {Modèle LLM};
+  \node[data, below=of model] (schema)
+       {Schéma du tool :\\\scriptsize \{code: str, timeout\_seconds: int = 5\}};
+  \node[tool, below=of schema, fill=orange!8, draw=orange!70!black]
+       (tool) {run\_python\_code\_v2\\\scriptsize clamp + subprocess};
+
+  \node[block, below right=8mm and 14mm of tool] (cas1)
+       {Cas 1 : code rapide\\\scriptsize $\rightarrow$ default (5s)};
+  \node[block, below left=8mm and 14mm of tool] (cas2)
+       {Cas 2 : calcul long\\\scriptsize $\rightarrow$ override (ex. 30s)};
+
+  \draw[flowdata] (model) -- (schema);
+  \draw[flow]     (schema)-- (tool);
+  \draw[flow]     (tool)  -- (cas1);
+  \draw[flow]     (tool)  -- (cas2);
+\end{tikzpicture}
+\end{center}
+
+Le modèle voit la signature complète, lit la docstring, et décide à
+chaque appel s'il garde la valeur par défaut ou la surcharge.
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+from langchain_core.tools import tool
+
+
+@tool
+def run_python_code_v2(code: str, timeout_seconds: int = 5) -> str:
+    """Exécute du code Python et renvoie stdout + stderr.
+
+    Args:
+        code: Le code Python à exécuter, complet et autonome.
+        timeout_seconds: Délai max avant interruption. Défaut : 5 secondes.
+            Augmente cette valeur SEULEMENT si le code requiert manifestement
+            un calcul long (entraînement, traitement de gros datasets, etc.).
+            Maximum raisonnable : 60 secondes.
+    """
+    timeout_seconds = max(1, min(timeout_seconds, 60))  # clamp défensif
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        f.write(code)
+        path = f.name
+    try:
+        result = subprocess.run(
+            [sys.executable, path],
+            capture_output=True, text=True, timeout=timeout_seconds,
+        )
+        parts = []
+        if result.stdout:
+            parts.append(f"STDOUT:\n{result.stdout}")
+        if result.stderr:
+            parts.append(f"STDERR:\n{result.stderr}")
+        parts.append(f"Exit code: {result.returncode} (timeout utilisé: {timeout_seconds}s)")
+        return "\n\n".join(parts)
+    except subprocess.TimeoutExpired:
+        return (
+            f"ERREUR: timeout après {timeout_seconds} secondes. "
+            "Si tu pensais que le code devait être long, augmente timeout_seconds. "
+            "Sinon, il y a sans doute une boucle infinie ou une récursion non terminale."
+        )
+    finally:
+        Path(path).unlink(missing_ok=True)
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — Le paramètre avec valeur par défaut}
+
+\begin{pythoncode}
+def run_python_code_v2(code: str, timeout_seconds: int = 5) -> str:
+\end{pythoncode}
+
+Le décorateur \texttt{@tool} extrait \emph{toute} la signature et la
+traduit en JSON Schema~:
+
+\begin{pythoncode}
+{
+    "type": "object",
+    "properties": {
+        "code": {"type": "string"},
+        "timeout_seconds": {"type": "integer", "default": 5},
+    },
+    "required": ["code"],     # timeout_seconds N'EST PAS requis
+}
+\end{pythoncode}
+
+Ce JSON Schema est envoyé au LLM. Le modèle peut donc \textbf{choisir}
+de remplir \texttt{timeout\_seconds}, ou de laisser le tool utiliser le
+défaut.
+
+\subsubsection*{Étape 2 — La docstring guide la décision}
+
+C'est la docstring du paramètre qui pilote le comportement~:
+
+\begin{quote}\itshape
+« Augmente cette valeur \textbf{SEULEMENT} si le code requiert
+manifestement un calcul long (entraînement, traitement de gros datasets,
+etc.). Maximum raisonnable~: 60 secondes. »
+\end{quote}
+
+Trois leviers~:
+\begin{itemize}[leftmargin=*]
+  \item \textbf{« SEULEMENT si »} en capitales~: signal fort que c'est
+        une exception, pas la règle.
+  \item \textbf{Exemples concrets}~: « entraînement, gros datasets ».
+        Donne au LLM des templates de cas qui justifient l'override.
+  \item \textbf{Maximum nommé}~: « 60 secondes »~: le LLM ne devrait
+        pas dépasser cette borne, mais on a aussi un clamp côté serveur
+        au cas où.
+\end{itemize}
+
+\subsubsection*{Étape 3 — Le clamp défensif côté Python}
+
+\begin{pythoncode}
+timeout_seconds = max(1, min(timeout_seconds, 60))
+\end{pythoncode}
+
+Pourquoi double protection (prompt + clamp)~?
+\begin{itemize}[leftmargin=*]
+  \item Le modèle peut \textbf{halluciner} une valeur (1000 secondes,
+        ou même négative).
+  \item Le modèle peut être \textbf{exploité}~: une question pourrait
+        chercher à passer \texttt{timeout\_seconds=99999} pour bloquer
+        le serveur.
+  \item En production, on ne fait jamais confiance au LLM pour des
+        valeurs critiques~: \textbf{défense en profondeur}.
+\end{itemize}
+
+\begin{quote}\itshape
+La règle générale~: tout paramètre numérique exposé à un LLM doit avoir
+des bornes \textbf{explicites} côté serveur. La docstring guide ; le
+clamp protège.
+\end{quote}
+
+\subsubsection*{Étape 4 — Les deux cas attendus}
+
+\textbf{Cas 1 — code rapide} :
+
+\begin{pythoncode}
+"Exécute ce code : print(sum(range(100)))"
+\end{pythoncode}
+
+L'agent appelle \texttt{run\_python\_code\_v2(code="\dots")} \textbf{sans}
+spécifier \texttt{timeout\_seconds} — il utilise le défaut de 5s.
+Dans l'historique, le \texttt{tool\_call} contient un seul argument~:
+\texttt{\{"code": "\dots"\}}.
+
+\textbf{Cas 2 — calcul long} (somme des premiers jusqu'à 5M) :
+
+L'utilisateur précise « ça met une bonne dizaine de secondes ». L'agent
+\emph{lit} cette information, comprend qu'il dépasse le défaut, et
+appelle~:
+
+\begin{pythoncode}
+run_python_code_v2(code="...", timeout_seconds=30)
+\end{pythoncode}
+
+\begin{quote}\itshape
+C'est \textbf{une preuve} que la docstring conditionne le comportement
+réel du modèle. La phrase « Augmente cette valeur SEULEMENT si\dots » est
+lue et appliquée. Tu peux tester en retirant cette phrase et observer
+que le modèle, soit override systématiquement (overshoot), soit ne
+l'override jamais (timeout au cas 2).
+\end{quote}
+
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 3 -- Tool avec paramètre timeout_seconds configurable
+======================================================================
+
+--- Cas 1 : code rapide (timeout par défaut attendu) ---
+
+[USER]:
+  Exécute ce code pour me dire la sortie :
+  ```python
+  print(sum(range(100)))
+  ```
+
+[AI]:
+  -> tool_use: run_python_code_v2({'code':
+                                    'print(sum(range(100)))'})
+       (pas de timeout_seconds -> défaut 5s)
+
+[TOOL run_python_code_v2]:
+     STDOUT:
+     4950
+     Exit code: 0 (timeout utilisé: 5s)
+
+[AI]:
+  La sortie est **4950**.
+
+  Ce code calcule la somme de tous les nombres de 0 à 99 (car
+  `range(100)` génère les entiers de 0 à 99 inclus).
+  Mathématiquement, c'est : 0 + 1 + 2 + ... + 99 = **4950**.
+
+
+--- Cas 2 : calcul long, l'agent doit augmenter le timeout ---
+
+[USER]:
+  J'ai écrit un code qui calcule la somme des nombres premiers
+  jusqu'à 5 millions. Ca met une bonne dizaine de secondes à tourner
+  sur ma machine. Tu peux l'exécuter pour vérifier le résultat ?
+
+  ```python
+  def is_prime(n):
+      if n < 2: return False
+      for i in range(2, int(n**0.5)+1):
+          if n % i == 0: return False
+      return True
+
+  total = sum(n for n in range(2, 5_000_000) if is_prime(n))
+  print(total)
+  ```
+
+[AI]:
+  Je vais exécuter ton code. Comme tu l'as mentionné, ça va prendre
+  un peu de temps, donc je vais augmenter le délai d'exécution.
+  -> tool_use: run_python_code_v2({
+       'code': '...',
+       'timeout_seconds': 30   <-- augmenté explicitement
+     })
+
+[TOOL run_python_code_v2]:
+     STDOUT:
+     838596693108
+     Exit code: 0 (timeout utilisé: 30s)
+
+[AI]:
+  Parfait ! Ton code fonctionne correctement et donne le résultat :
+  **838 596 693 108**
+
+  Ton algorithme est correct, mais je peux te montrer comment
+  l'optimiser significativement avec le **Crible d'Eratosthène**,
+  qui trouve tous les nombres premiers jusqu'à une limite en une
+  seule passe (probablement 10-20x plus rapide).
+
+----------------------------------------------------------------------
+OBSERVATIONS :
+ - Au cas 1, l'agent appelle le tool SANS spécifier timeout_seconds
+   (il garde la valeur par défaut 5s).
+ - Au cas 2, l'agent voit dans ta question que le code prend ~10s,
+   et passe explicitement timeout_seconds=30 (ou similaire).
+ - C'est UNE preuve que la docstring conditionne le comportement :
+   la phrase 'Augmente cette valeur SEULEMENT si...' est lue et
+   appliquée par le modèle.
+\end{verbatim}
+\end{tcolorbox}
+
+\subsection{Vérification dans LangSmith}
+
+Dans la trace, examine l'onglet \emph{Tool calls} du \texttt{AIMessage}
+qui invoque \texttt{run\_python\_code\_v2}~:
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Cas 1}~: \texttt{args = \{"code": "\dots"\}}. La clé
+        \texttt{timeout\_seconds} \textbf{n'apparaît pas} → défaut utilisé.
+  \item \textbf{Cas 2}~: \texttt{args = \{"code": "\dots", "timeout\_seconds": 30\}}.
+        L'override est explicite.
+\end{itemize}
+
+Le \texttt{ToolMessage} en sortie contient la trace exacte du timeout
+utilisé (\texttt{"Exit code: 0 (timeout utilisé: 30s)"}), ce qui permet
+de vérifier que le clamp côté serveur a bien laissé passer la valeur.
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item Les \textbf{paramètres avec défaut} sont exposés au LLM dans le
+        JSON Schema. Le LLM choisit de les remplir ou pas.
+  \item La \texttt{description} du paramètre dans la docstring est ce
+        qui guide le modèle pour \emph{quand} override.
+  \item \textbf{Défense en profondeur}~: prompt qui guide + clamp côté
+        serveur. Ne jamais faire confiance aux valeurs numériques
+        produites par le LLM.
+  \item Toujours répercuter la valeur effectivement utilisée dans la
+        sortie du tool (« timeout utilisé : 30s »)~: ça aide l'agent
+        à interpréter le résultat.
+\end{enumerate}
+\par}
+
+% #####################################################################
+% #####################################################################
+\section{Tool qui appelle un sous-LLM (\texttt{evaluate\_student\_answer})}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice bonus 4. Composer un agent et un sous-LLM dans un tool]
+Crée un tool \texttt{evaluate\_student\_answer(question, answer)} qui
+prend une question et la réponse d'un élève, et renvoie une évaluation
+structurée (correct/incorrect, note, feedback, concepts manquants). Le
+tool doit utiliser \textbf{en interne} une mini-chaîne LCEL avec
+\texttt{with\_structured\_output(AnswerEvaluation)}.
+
+\textbf{Contrainte}~: la mini-chaîne LCEL est construite au niveau du
+module (une fois pour toute) pour éviter de la recréer à chaque appel
+du tool.
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Maîtriser le pattern « tool qui appelle un autre LLM en
+        interne »~: c'est la composition d'agents au sens large.
+  \item Utiliser \texttt{with\_structured\_output} avec un schéma
+        Pydantic riche pour produire des évaluations \emph{exploitables}.
+  \item Comprendre l'architecture en \textbf{couches}~: agent principal
+        $\to$ tool $\to$ sous-chaîne LCEL $\to$ sous-LLM.
+  \item Observer le coût~: 2 appels LLM dans un seul tour d'agent.
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\begin{center}
+\begin{tikzpicture}[node distance=4mm and 8mm]
+  \node[llm] (main) {Agent principal\\\scriptsize Claude (modèle 1)};
+  \node[block, below=of main] (tcall) {tool\_call evaluate\_student\_answer(\dots)};
+  \node[tool, below=of tcall] (tool) {evaluate\_student\_answer};
+  \node[block, below=of tool] (chain) {chaîne LCEL\\\scriptsize \_evaluator\_chain};
+  \node[llm, below=of chain] (sub) {Sous-LLM\\\scriptsize Claude (modèle 2 = même)};
+  \node[schema, below=of sub] (sch) {AnswerEvaluation\\\scriptsize (Pydantic)};
+  \node[data, below=of sch] (out) {string formaté\\\scriptsize « Correct : oui / Note : 7/10 / \dots »};
+
+  \draw[flow] (main)  -- (tcall);
+  \draw[flow] (tcall) -- (tool);
+  \draw[flow] (tool)  -- (chain) node[label, midway, right]{\_evaluator\_chain.invoke(\dots)};
+  \draw[flow] (chain) -- (sub);
+  \draw[flow] (sub)   -- (sch);
+  \draw[flow] (sch)   -- (out);
+
+  \draw[flow, dashed, draw=orange!70!black]
+       (out.east) ..controls +(5,0) and +(5,0).. (main.east)
+       node[label, midway, right]{remonte à l'agent};
+\end{tikzpicture}
+\end{center}
+
+Vu de l'agent principal, c'est un tool comme un autre. Vu de
+l'intérieur, c'est un \textbf{deuxième appel LLM} caché.
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+from pydantic import BaseModel, Field
+from langchain_core.tools import tool
+from langchain_core.prompts import ChatPromptTemplate
+from config import get_model
+
+
+class AnswerEvaluation(BaseModel):
+    """Évaluation pédagogique d'une réponse d'élève."""
+
+    is_correct: bool = Field(
+        description="True si la réponse est essentiellement correcte, "
+                    "False si elle contient une erreur substantielle."
+    )
+    score: int = Field(
+        description="Note de 0 à 10. 0 = totalement faux, 10 = parfait. "
+                    "Tiens compte de la précision technique ET de la clarté."
+    )
+    feedback: str = Field(
+        description="Feedback pédagogique en 2-3 phrases pour l'élève. "
+                    "Souligne ce qui est juste, puis ce qu'il faut corriger ou préciser."
+    )
+    missing_concepts: list[str] = Field(
+        description="Concepts importants que la réponse aurait dû mentionner mais omet. "
+                    "Liste vide si la réponse est complète."
+    )
+
+
+# La mini-chaîne LCEL utilisée à l'intérieur du tool. On la construit
+# une seule fois en module-level pour éviter de la recréer à chaque appel.
+_eval_prompt = ChatPromptTemplate.from_messages([
+    ("system",
+     "Tu es un évaluateur pédagogique de réponses Python. Sois exigeant "
+     "techniquement mais bienveillant dans la formulation."),
+    ("human",
+     "Question posée à l'élève :\n{question}\n\n"
+     "Réponse de l'élève :\n{answer}\n\n"
+     "Évalue cette réponse."),
+])
+
+_evaluator_chain = (
+    _eval_prompt
+    | get_model().with_structured_output(AnswerEvaluation)
+)
+
+
+@tool
+def evaluate_student_answer(question: str, answer: str) -> str:
+    """Évalue la réponse d'un élève à une question technique sur Python.
+
+    À utiliser quand un élève a écrit une réponse et que tu veux la noter
+    objectivement plutôt que de te contenter d'un "oui" ou "non" qualitatif.
+    Renvoie un score, un feedback, et la liste des concepts manquants.
+
+    Args:
+        question: La question posée à l'élève.
+        answer: La réponse complète de l'élève à évaluer.
+    """
+    # Sous-LLM : on appelle une mini-chaîne LCEL avec sortie structurée.
+    result = _evaluator_chain.invoke({"question": question, "answer": answer})
+
+    # On reformate l'objet Pydantic en string pour l'agent.
+    # (Les tools renvoient toujours du texte, c'est leur protocole.)
+    missing = ", ".join(result.missing_concepts) if result.missing_concepts else "(aucun)"
+    return (
+        f"Correct : {'oui' if result.is_correct else 'non'}\n"
+        f"Note : {result.score}/10\n"
+        f"Concepts manquants : {missing}\n"
+        f"Feedback : {result.feedback}"
+    )
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — Le schéma Pydantic d'évaluation}
+
+\texttt{AnswerEvaluation} contient 4 champs orientés
+\emph{pédagogie}~: un booléen pour le verdict net, un score chiffré, un
+feedback en langage naturel, et une liste de concepts manquants.
+
+Le choix des types n'est pas neutre~:
+\begin{itemize}[leftmargin=*]
+  \item \texttt{is\_correct: bool}~: verdict binaire utile en aval
+        (par exemple pour filtrer les bonnes réponses).
+  \item \texttt{score: int}~: granularité 0-10, exploitable pour
+        agrégation et stats.
+  \item \texttt{feedback: str}~: texte à montrer à l'élève.
+  \item \texttt{missing\_concepts: list[str]}~: liste itérable, pas
+        une chaîne JSON. Permet de calculer du \emph{coverage} sur
+        plusieurs réponses.
+\end{itemize}
+
+\subsubsection*{Étape 2 — La mini-chaîne LCEL construite \emph{une fois}}
+
+\begin{pythoncode}
+_eval_prompt = ChatPromptTemplate.from_messages([...])
+_evaluator_chain = _eval_prompt | get_model().with_structured_output(AnswerEvaluation)
+\end{pythoncode}
+
+\textbf{Pourquoi au niveau du module~?} \texttt{get\_model()} crée une
+instance du client (charge la config, ouvre éventuellement des
+connexions). On la construit une fois à l'import et on la réutilise.
+Sinon, chaque appel du tool recréerait l'instance — coûteux et
+inutile.
+
+\begin{quote}\itshape
+Pattern important~: tout ce qui est \emph{coûteux à construire et
+réutilisable} (modèle, chaîne, retriever, embeddings\dots) vit au
+niveau du module. Les fonctions et tools ne font que \texttt{.invoke()}
+sur ces objets.
+\end{quote}
+
+\subsubsection*{Étape 3 — Le tool reformate en string}
+
+Le tool reçoit deux strings (question, answer), invoque la chaîne, et
+\textbf{reformate} l'objet Pydantic en string~:
+
+\begin{pythoncode}
+result = _evaluator_chain.invoke({"question": question, "answer": answer})
+# result est un objet AnswerEvaluation
+
+return (
+    f"Correct : {'oui' if result.is_correct else 'non'}\n"
+    f"Note : {result.score}/10\n"
+    ...
+)
+\end{pythoncode}
+
+\textbf{Pourquoi reformater~?} Le protocole des tools est~: \emph{ils
+renvoient une string}. Cette string devient le contenu d'un
+\texttt{ToolMessage} dans l'historique, ensuite \emph{relu} par l'agent
+principal pour formuler sa réponse à l'utilisateur.
+
+\subsubsection*{Étape 4 — L'architecture en couches}
+
+Quand l'agent principal traite la question \emph{« Évalue cette réponse
+d'élève »}, l'arbre d'exécution a quatre niveaux~:
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Agent principal (Claude)}~: décide d'appeler
+        \texttt{evaluate\_student\_answer(question, answer)}.
+  \item \textbf{Tool \texttt{evaluate\_student\_answer}}~: Python exécute
+        la fonction.
+  \item \textbf{Sous-LLM (Claude à nouveau)}~: appelé en interne par
+        la mini-chaîne. Reçoit son \emph{propre} prompt système et
+        renvoie un \texttt{AnswerEvaluation} validé par Pydantic.
+  \item \textbf{Le tool reformate} l'objet en string et la rend à
+        l'agent principal.
+  \item \textbf{L'agent principal} intègre le résultat et formule sa
+        réponse à l'utilisateur.
+\end{enumerate}
+
+C'est \textbf{2 appels LLM} dans un seul tour d'agent~: un par
+l'agent principal pour décider, un par le sous-LLM pour évaluer.
+
+\subsubsection*{Étape 5 — Pourquoi ce pattern est important}
+
+Le pattern « tool qui appelle un sous-LLM » résout des problèmes
+fréquents~:
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Compétence spécialisée}~: l'agent principal n'est pas un
+        évaluateur ; il \emph{délègue} à un LLM dédié avec son prompt
+        d'évaluation.
+  \item \textbf{Sortie structurée garantie}~: l'agent principal manipule
+        \texttt{AnswerEvaluation} via le tool, donc \texttt{score} est
+        toujours un \texttt{int} entre 0 et 10, jamais une string
+        ambiguë.
+  \item \textbf{Réutilisabilité}~: la mini-chaîne peut être appelée
+        directement ailleurs (interface enseignant) sans passer par
+        l'agent.
+\end{itemize}
+
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 4 -- Tool 'evaluate_student_answer' (sous-LLM caché)
+======================================================================
+
+[USER]:
+  Un élève a répondu à une question d'examen. Evalue-la pour moi et
+  formule un commentaire que je pourrais lui envoyer.
+
+  Question : A quoi sert le mot-clé `yield` en Python et en quoi
+  diffère-t-il de `return` ?
+
+  Réponse de l'élève : << `yield` permet de retourner plusieurs
+  valeurs depuis une fonction, contrairement à `return` qui n'en
+  retourne qu'une seule. >>
+
+[AI]:
+  Je vais évaluer cette réponse de manière objective.
+  -> tool_use: evaluate_student_answer({
+       'question': 'A quoi sert le mot-clé `yield`...',
+       'answer':   '`yield` permet de retourner...'
+     })
+
+[TOOL evaluate_student_answer]:
+     Correct : non
+     Note : 4/10
+     Concepts manquants :
+       - Générateurs et itérateurs
+       - Lazy evaluation (évaluation paresseuse)
+       - Sauvegarde de l'état d'exécution avec yield
+       - Efficacité mémoire des générateurs
+       - Différence entre retourner une liste et utiliser yield
+     Feedback : Tu as identifié une différence importa...
+
+[AI]:
+  ## Commentaire à envoyer à l'élève :
+
+  **Evaluation : 4/10**
+
+  Bonne intuition, mais ta réponse est **incomplète et imprécise**.
+  Voici ce qui manque :
+
+  ### Ce que tu as bien compris
+  Tu as raison que `yield` permet de retourner plusieurs valeurs, ce
+  qui est une différence avec `return`.
+
+  ### Ce qui manque
+  La vraie différence entre `yield` et `return` ne porte pas
+  seulement sur le **nombre** de valeurs, mais sur **comment** et
+  **quand** elles sont retournées :
+
+  1. **`yield` crée un générateur** : une fonction qui retourne les
+     valeurs **une à une, à la demande** (lazy evaluation), sans
+     tout calculer d'un coup.
+  2. **`return` retourne tout immédiatement** : la fonction s'arrête
+     et retourne une valeur unique (ou une liste si tu veux
+     plusieurs valeurs).
+  3. **Avantage mémoire** : avec `yield`, tu économises de la
+     mémoire car les valeurs ne sont générées que quand on les
+     demande.
+
+  ### Exemple pour clarifier
+  ```python
+  # Avec return : tout est calculé et stocké en mémoire
+  def nombres_return():
+      return [1, 2, 3, 4, 5]
+
+  # Avec yield : les valeurs sont générées à la demande
+  def nombres_yield():
+      yield 1; yield 2; yield 3; yield 4; yield 5
+  ```
+
+  **A revoir** : les concepts de **générateurs**, **itérateurs** et
+  **lazy evaluation** pour bien maîtriser `yield`.
+
+----------------------------------------------------------------------
+ARCHITECTURE EN COUCHES A VISUALISER :
+ 1. AGENT PRINCIPAL (Claude) : décide d'appeler evaluate_student_answer.
+ 2. TOOL evaluate_student_answer : Python exécute la fonction.
+ 3. SOUS-LLM (Claude à nouveau) : appelé en interne par la mini-chaîne.
+    Reçoit son propre prompt, renvoie un objet Pydantic structuré.
+ 4. Le tool reformate l'objet en string et le rend à l'agent.
+ 5. L'agent intègre le résultat et formule sa réponse à l'utilisateur.
+
+ -> 2 appels LLM dans ce tour, pour 1 invocation d'agent.
+ -> Si tu actives LangSmith, tu verras les 2 traces emboîtées.
+\end{verbatim}
+\end{tcolorbox}
+
+\subsection{Vérification dans LangSmith}
+
+L'arbre d'exécution montre les \textbf{traces emboîtées}~:
+
+\begin{center}
+\begin{tikzpicture}[every node/.style={font=\footnotesize\ttfamily, anchor=west}]
+  \node                              (a) {agent (LLM \#1) ← Claude décide};
+  \node[below=1mm of a]              (b) {  Output: tool\_calls = [evaluate\_student\_answer]};
+  \node[below=1mm of b]              (c) {tools (ToolNode)};
+  \node[below=1mm of c, xshift=4mm]  (d) {evaluate\_student\_answer(question, answer)};
+  \node[below=1mm of d, xshift=4mm]  (e) {RunnableSequence (\_evaluator\_chain)};
+  \node[below=1mm of e, xshift=4mm]  (f) {ChatPromptTemplate};
+  \node[below=1mm of f]              (g) {ChatAnthropic (LLM \#2) $\rightarrow$ AnswerEvaluation};
+  \node[below=1mm of g, xshift=-12mm](h) {agent (LLM \#3) ← Claude répond};
+\end{tikzpicture}
+\end{center}
+
+Tu peux cliquer sur chaque \texttt{ChatAnthropic} pour voir les
+prompts \emph{différents}~: l'un est le system\_prompt de l'agent
+principal, l'autre est celui de l'évaluateur.
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item Pattern \textbf{tool $\to$ sous-LLM}~: un tool peut contenir
+        une chaîne LCEL complète, avec son propre prompt et sortie
+        structurée.
+  \item Construire les objets coûteux (modèle, chaîne) au niveau du
+        \textbf{module}, pas dans la fonction du tool.
+  \item Les tools renvoient toujours du \textbf{texte}~: reformater
+        l'objet Pydantic en string compréhensible pour l'agent.
+  \item Coût~: \textbf{2 appels LLM} dans un seul tour d'agent. Visible
+        en clair dans LangSmith (traces emboîtées).
+  \item Cas d'usage~: déléguer une compétence spécialisée
+        (évaluation, classification, extraction) tout en gardant un
+        agent généraliste en orchestrateur.
+\end{enumerate}
+\par}
+
+% #####################################################################
+% #####################################################################
+\section{Streaming avec \texttt{agent.stream()}}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice bonus 5. Streamer un agent en deux modes complémentaires]
+Passe de \texttt{agent.invoke()} à \texttt{agent.stream()} pour obtenir
+une UX réactive. Expérimente avec deux modes~:
+\texttt{stream\_mode="updates"} (chaque étape du graphe émet un chunk au
+moment où le nœud termine) et \texttt{stream\_mode="messages"} (chaque
+token du modèle est émis individuellement, effet machine à écrire).
+
+\textbf{Contrainte}~: dans le mode \texttt{messages}, filtrer pour ne
+streamer que les tokens du nœud \texttt{agent} (pas ceux d'éventuels
+sous-LLM dans des tools).
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Connaître les trois modes de \texttt{agent.stream()}~:
+        \texttt{updates}, \texttt{messages}, \texttt{values}.
+  \item Savoir lire un chunk \texttt{updates}~: c'est un dict
+        \texttt{\{node\_name: state\_diff\}}.
+  \item Savoir filtrer le streaming \texttt{messages} par nœud (via la
+        \texttt{metadata}).
+  \item Combiner les deux modes pour une UX moderne (badges d'étapes +
+        machine à écrire).
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\begin{center}
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[node distance=5mm and 10mm]
+  \node[block] (agent) {agent.stream(\{messages: [\dots]\}, stream\_mode=\dots)};
+
+  \node[block, below left=14mm and 14mm of agent, fill=teal!8] (updates)
+       {stream\_mode="updates"\\\scriptsize chunks par nœud terminé};
+  \node[block, below right=14mm and 14mm of agent, fill=teal!8] (messages)
+       {stream\_mode="messages"\\\scriptsize chunks token par token};
+
+  \node[data, below=of updates] (u_use)
+       {Badges : « utilise X »\\« utilise Y »\\\dots};
+  \node[data, below=of messages] (m_use)
+       {Effet machine à écrire\\(comme ChatGPT)};
+
+  \draw[flow] (agent) -- (updates);
+  \draw[flow] (agent) -- (messages);
+  \draw[flow] (updates) -- (u_use);
+  \draw[flow] (messages) -- (m_use);
+\end{tikzpicture}%
+}
+\end{center}
+
+Les deux modes \textbf{ne sont pas exclusifs}~: en production, on les
+combine. \texttt{updates} pour afficher des badges au-dessus du chat
+(« l'agent utilise \texttt{search\_python\_docs}\dots ») ;
+\texttt{messages} pour le texte qui s'écrit progressivement.
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+from langchain_core.messages import HumanMessage
+from phase3_agent import build_agent
+
+
+def exercise_5_updates() -> None:
+    """Streaming au niveau des ÉTAPES (mode 'updates')."""
+    agent = build_agent()
+
+    for chunk in agent.stream(
+        {"messages": [HumanMessage(content=(
+            "Cherche dans la doc ce qu'est un itérable, "
+            "puis génère un exercice débutant sur ce sujet."
+        ))]},
+        stream_mode="updates",
+    ):
+        # chunk est un dict {nom_du_noeud: {clés_modifiées: valeurs}}.
+        # Avec create_agent, on a deux noeuds principaux : 'agent' et 'tools'.
+        for node_name, node_update in chunk.items():
+            messages = node_update.get("messages", [])
+            for msg in messages:
+                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                    for tc in msg.tool_calls:
+                        print(f"  [{node_name}] -> appel {tc['name']}({list(tc['args'].keys())})")
+                elif hasattr(msg, "name") and msg.name:
+                    # ToolMessage : a un .name pointant vers le tool qui a renvoyé
+                    preview = (msg.content or "")[:80].replace("\n", " ")
+                    print(f"  [{node_name}] <- retour de {msg.name}: {preview}...")
+                elif msg.content:
+                    preview = msg.content[:120].replace("\n", " ")
+                    print(f"  [{node_name}] >> {preview}...")
+
+
+def exercise_5_tokens() -> None:
+    """Streaming token par token (mode 'messages')."""
+    agent = build_agent()
+
+    # Mode 'messages' : on reçoit des tuples (chunk_message, metadata).
+    for chunk, metadata in agent.stream(
+        {"messages": [HumanMessage(content=(
+            "Explique-moi en deux phrases ce qu'est une compréhension de liste."
+        ))]},
+        stream_mode="messages",
+    ):
+        # On ne stream que le texte produit par le noeud 'agent' (pas les tools)
+        if metadata.get("langgraph_node") == "agent" and chunk.content:
+            text = chunk.content if isinstance(chunk.content, str) else "".join(
+                b.get("text", "") for b in chunk.content if isinstance(b, dict)
+            )
+            print(text, end="", flush=True)
+    print()
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — Les trois modes de streaming}
+
+\begin{center}
+\begin{tabular}{p{2.5cm} p{11.5cm}}
+\toprule
+\textbf{Mode} & \textbf{Ce qu'on reçoit} \\
+\midrule
+\texttt{updates}
+& Un chunk par \textbf{mise à jour} de l'état du graphe (= un nœud
+termine). Format~: \texttt{\{node\_name: state\_diff\}}. Idéal pour
+afficher « l'agent a appelé tel tool » en temps réel. \\[1mm]
+\texttt{messages}
+& Un chunk par \textbf{token} produit par un modèle. Format~: tuple
+\texttt{(chunk\_msg, metadata)}. Idéal pour l'effet machine à écrire. \\[1mm]
+\texttt{values}
+& L'\textbf{état complet} du graphe à chaque étape (très verbeux, utile
+en debug). \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection*{Étape 2 — Mode \texttt{updates}~: chunks par étape}
+
+\begin{pythoncode}
+for chunk in agent.stream({"messages": [...]}, stream_mode="updates"):
+    for node_name, node_update in chunk.items():
+        # node_name est typiquement 'agent' ou 'tools'
+        messages = node_update.get("messages", [])
+        # messages contient ce que ce nœud A AJOUTÉ à l'état
+\end{pythoncode}
+
+Avec \texttt{create\_agent}, deux nœuds principaux émettent des updates~:
+\begin{itemize}[leftmargin=*]
+  \item \texttt{agent}~: produit des \texttt{AIMessage} (avec ou sans
+        \texttt{tool\_calls}).
+  \item \texttt{tools}~: produit des \texttt{ToolMessage} (résultats des
+        tools).
+\end{itemize}
+
+Dans la boucle, on inspecte le contenu pour afficher~: appel de tool,
+retour de tool, ou réponse textuelle.
+
+\subsubsection*{Étape 3 — Mode \texttt{messages}~: tokens du LLM}
+
+\begin{pythoncode}
+for chunk, metadata in agent.stream({"messages": [...]}, stream_mode="messages"):
+    if metadata.get("langgraph_node") == "agent" and chunk.content:
+        print(chunk.content, end="", flush=True)
+\end{pythoncode}
+
+Deux subtilités~:
+
+\begin{itemize}[leftmargin=*]
+  \item Le chunk est un \texttt{AIMessageChunk} (ou un autre type de
+        message). \texttt{chunk.content} peut être une \texttt{str} ou
+        une liste de blocs (selon la version de l'API). Le code gère
+        les deux cas.
+  \item Le \texttt{metadata.langgraph\_node} indique de \emph{quel}
+        nœud du graphe provient le token. On filtre sur
+        \texttt{"agent"} pour ne pas streamer accidentellement les
+        tokens d'un éventuel sous-LLM caché dans un tool.
+\end{itemize}
+
+\subsubsection*{Étape 4 — \texttt{print(\dots, end="", flush=True)} : le secret}
+
+Pour que les tokens s'écrivent en temps réel sur le terminal~:
+\begin{itemize}[leftmargin=*]
+  \item \texttt{end=""}~: pas de saut de ligne après chaque chunk.
+  \item \texttt{flush=True}~: force l'écriture immédiate (sans ça,
+        Python bufferise par ligne ou par bloc de 4ko).
+\end{itemize}
+
+C'est le même pattern que pour le streaming \emph{chains} de la Phase 1.
+
+\subsubsection*{Étape 5 — Combiner les deux modes en production}
+
+Dans une vraie UI~:
+\begin{itemize}[leftmargin=*]
+  \item En \textbf{haut} du chat~: badges « l'agent réfléchit\dots »,
+        « utilise \texttt{search\_python\_docs}\dots »~— issus du mode
+        \texttt{updates}.
+  \item Dans la \textbf{bulle de réponse}~: texte qui s'écrit
+        progressivement~— issu du mode \texttt{messages}.
+\end{itemize}
+
+LangChain permet d'obtenir les deux en parallèle avec
+\texttt{stream\_mode=["updates", "messages"]}~:
+
+\begin{pythoncode}
+for kind, chunk in agent.stream(
+    {"messages": [...]},
+    stream_mode=["updates", "messages"],   # mode multiple
+):
+    if kind == "updates":
+        # afficher badge
+        pass
+    elif kind == "messages":
+        # afficher token
+        pass
+\end{pythoncode}
+
+\begin{quote}\itshape
+\textbf{Règle pratique}~: en production, toujours streamer. Une UX qui
+attend 8 secondes en boîte noire avant d'afficher la réponse complète
+est perçue comme cassée — même si la durée totale est identique au
+streaming.
+\end{quote}
+
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 5a -- Streaming par étapes (stream_mode='updates')
+======================================================================
+
+Question envoyée. Affichage des étapes au fil de l'eau :
+
+  [model] -> appel search_python_docs(['query'])
+  [model] -> appel generate_exercise(['topic', 'difficulty'])
+[OK] Rechargement de l'index depuis ./chroma_db
+  [tools] <- retour de search_python_docs: Source:
+            https://docs.python.org/3/glossary.html or the script
+            being run has fini...
+  [tools] <- retour de generate_exercise: Exercice sur 'itérables'
+            (niveau débutant) : Code de référence : # Exemple 1 :...
+  [model] [chat] ## Définition d'un itérable
+            D'après la **documentation officielle Python**, un
+            **itérable** est :
+            > Un objet capable ...
+
+======================================================================
+EXERCICE 5b -- Streaming token par token (stream_mode='messages')
+======================================================================
+
+Réponse qui s'affiche au fur et à mesure (effet machine à écrire) :
+
+  [... tokens consommés un par un, sortie typewriter ...]
+
+----------------------------------------------------------------------
+QUAND UTILISER QUEL MODE :
+ - 'updates'  : UI qui montre 'l'agent réfléchit / l'agent utilise X'.
+                Idéal pour les workflows long-running où
+                l'utilisateur attendrait sinon dans le vide.
+ - 'messages' : effet machine à écrire, comme ChatGPT et Claude.ai.
+                Indispensable pour une UX de chat moderne.
+ - On combine souvent les deux : on stream les tokens du texte
+   final, et on affiche des badges 'utilise tool X' pour les
+   étapes intermédiaires.
+\end{verbatim}
+\end{tcolorbox}
+
+\subsection{Vérification dans LangSmith}
+
+\texttt{agent.stream()} produit la \textbf{même trace} que
+\texttt{agent.invoke()} dans LangSmith~: les nœuds sont tracés au moment
+où ils terminent. La seule différence est côté client~: on consomme
+incrémentalement au lieu d'attendre la fin.
+
+\begin{quote}\itshape
+LangSmith expose la métrique \emph{Time to first token (TTFT)} dans les
+runs streamés. Sur un agent à 2 itérations ReAct, le TTFT est de
+l'ordre du \texttt{search\_python\_docs} (rapide) ou du premier
+\texttt{ChatAnthropic} (variable). Une UI streamée affiche le premier
+contenu en $\sim$300 ms au lieu de $\sim$5 s.
+\end{quote}
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item \texttt{agent.stream(input, stream\_mode=\dots)} a 3 modes :
+        \texttt{updates} (par nœud), \texttt{messages} (par token),
+        \texttt{values} (état complet).
+  \item Mode \texttt{updates}~: chunks \texttt{\{node\_name: state\_diff\}},
+        idéal pour les badges « l'agent fait X ».
+  \item Mode \texttt{messages}~: tuples \texttt{(chunk\_msg, metadata)}.
+        Filtrer sur \texttt{metadata["langgraph\_node"] == "agent"}
+        pour exclure les sous-LLM.
+  \item \texttt{print(\dots, end="", flush=True)} reste la condition
+        sine qua non du streaming visible côté terminal.
+  \item En production, on \textbf{combine} les deux modes
+        (\texttt{stream\_mode=["updates", "messages"]}) pour une UX
+        moderne avec badges d'étapes et machine à écrire.
+\end{enumerate}
+\par}
+
 
 \end{document}

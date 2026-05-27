@@ -104,7 +104,7 @@
 
 % ---------- Titre ----------
 \title{\textbf{Phase 2 — RAG sur la documentation Python}\\
-\large Cinq concepts essentiels du \emph{Retrieval-Augmented Generation}}
+\large Cinq concepts essentiels + six exercices pour aller plus loin}
 \author{Cours PyTutor2}
 \date{}
 
@@ -121,11 +121,17 @@ l'indexation (Web $\to$ embeddings $\to$ Chroma persistante), le
 des sources avec \texttt{RunnableParallel}, et la comparaison
 \emph{similarity vs MMR}. Chaque exercice suit la même structure que
 la Phase 1 (énoncé + objectifs en boîte, solution détaillée, vérification
-LangSmith, récapitulatif).
+LangSmith, récapitulatif). Une seconde partie
+\emph{« Pour aller plus loin »} prolonge avec six exercices RAG avancés~:
+impact du \texttt{chunk\_size}, mode interactif CLI, prompt strict
+anti-hallucination, observabilité avec LangSmith,
+\texttt{MultiQueryRetriever}, et filtrage par métadonnée.
 \end{abstract}
 
 \tableofcontents
 \bigskip
+
+\part{Exercices}
 
 % #####################################################################
 % #####################################################################
@@ -372,6 +378,23 @@ if persist_path.exists() and not force_rebuild:
 C'est le pattern à connaître pour tous les artefacts coûteux à construire~:
 embeddings, modèles fine-tunés, caches de prompts, etc.
 
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+-> Indexation de 7 pages de docs.python.org...
+   7 pages chargées
+   327 chunks générés
+[OK] Index créé et persisté dans ./chroma_db
+\end{verbatim}
+\end{tcolorbox}
+
 \subsection{Vérification dans LangSmith}
 
 L'indexation pure n'implique \textbf{pas} d'appel LLM, donc rien à voir
@@ -549,6 +572,48 @@ mini_chain = retriever | truncate
 
 On verra dans l'exercice 3 comment l'enchaîner avec un prompt et un
 modèle pour faire un RAG complet.
+
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+[1] https://docs.python.org/3/tutorial/modules.html
+'UnicodeError', 'UnicodeTranslateError', 'UnicodeWarning', 'UserWarning',
+'ValueError', 'Warning', 'ZeroDivisionError', '_', '__build_class__',
+'__debug__', '__doc__', '__import__', '__name__', '__pac ...
+[2] https://docs.python.org/3/howto/functional.html
+GeneratorExit
+occurs, I suggest
+using a
+try:
+...
+finally:
+suite instead of catching
+GeneratorExit
+.
+The cumulative effect of these changes is to turn generators from one-way
+producers of information i ...
+[3] https://docs.python.org/3/tutorial/classes.html
+9. Classes
+9.1. A Word About Names and Objects
+9.2. Python Scopes and Namespaces
+9.2.1. Scopes and Namespaces Example
+9.3. A First Look at Classes
+9.3.1. Class Definition Syntax
+9.3.2. Class Objects
+9 ...
+[4] https://docs.python.org/3/howto/functional.html
+this case. Don't just use its value in expressions unless you're sure that
+the send() method will be the only method used to resume your generator
+function. In addition to send(), there are two othe ...
+\end{verbatim}
+\end{tcolorbox}
 
 \subsection{Vérification dans LangSmith}
 
@@ -805,6 +870,56 @@ Le modèle renvoie un \texttt{AIMessage}. Pour récupérer juste le texte
 de la réponse, on ajoute \texttt{| StrOutputParser()} en fin de chaîne.
 C'est le même parseur qu'on utilisait en streaming dans la Phase 1.
 
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+DEMO 1 -- RAG simple (retriever similarity, k=4)
+======================================================================
+
+Question : Comment écrire un générateur en Python ?
+
+# Comment écrire un générateur en Python ?
+
+D'après le contexte fourni, voici ce que je peux te dire sur les
+générateurs :
+
+## Définition
+Un **générateur** est une fonction qui contient une ou plusieurs
+expressions `yield` pour produire une série de valeurs [4].
+
+## Caractéristiques principales
+- Un générateur ressemble à une fonction normale, sauf qu'il utilise
+  le mot-clé `yield` [4]
+- Les valeurs produites peuvent être utilisées dans une boucle `for`
+  ou récupérées une à une avec la fonction `next()` [4]
+
+## Exemple de fonctionnement
+Selon le contexte, quand tu appelles `next()` sur un générateur, il
+exécute le code jusqu'à la prochaine expression `yield`. Quand il n'y
+a plus de valeurs à produire, une exception `StopIteration` est
+levée [1].
+
+## Points importants à retenir
+- Attention : `yield` retourne souvent `None`, donc tu dois vérifier
+  cette valeur [1]
+- Les générateurs ont des méthodes spéciales comme `throw()` et
+  `close()` pour les contrôler [1]
+
+**Cependant**, le contexte fourni ne contient pas d'exemple complet
+de code montrant comment écrire un générateur pas à pas. Pour avoir
+un exemple détaillé avec la syntaxe exacte, tu devrais consulter la
+documentation Python officielle sur les générateurs.
+\end{verbatim}
+\end{tcolorbox}
+
 \subsection{Vérification dans LangSmith}
 
 L'arbre d'exécution attendu~:
@@ -1055,6 +1170,76 @@ Le pattern \texttt{RunnableParallel} + \texttt{.assign}~:
   \item \textbf{Composable}~: tout reste un \texttt{Runnable}.
 \end{itemize}
 
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+DEMO 2 -- RAG avec inspection des sources
+======================================================================
+
+Question : A quoi sert le mot-clé `yield` exactement ?
+
+REPONSE :
+# A quoi sert le mot-clé `yield` ?
+
+Le mot-clé `yield` sert à **créer des générateurs** en Python. Voici
+ses principales fonctions [1,2,3] :
+
+## 1. **Suspendre l'exécution et retourner une valeur**
+Quand `yield` est rencontré, la fonction s'arrête et retourne une
+valeur. A chaque appel suivant, l'exécution reprend à partir du
+`yield` [2].
+
+## 2. **Préserver l'état local**
+Contrairement à `return` qui termine la fonction, `yield` **suspend
+l'exécution et préserve les variables locales**. Cela permet à la
+fonction de reprendre son travail plus tard [2].
+
+## 3. **Recevoir des valeurs**
+`yield` peut aussi **recevoir des valeurs** via la méthode
+`send(value)`. La valeur envoyée devient le résultat de
+l'expression `yield` [1,3].
+
+## Exemple simple [3] :
+```python
+def counter(maximum):
+    i = 0
+    while i < maximum:
+        val = (yield i)  # Retourne i, puis attend une valeur
+        if val is not None:
+            i = val      # Recoit une nouvelle valeur
+        else:
+            i += 1
+```
+
+**En résumé** : `yield` transforme une fonction ordinaire en
+**générateur** qui produit une séquence de valeurs une à une, tout en
+gardant son état entre chaque appel. C'est très utile pour économiser
+la mémoire avec de grandes séquences [2].
+
+SOURCES UTILISEES :
+  [1] https://docs.python.org/3/howto/functional.html
+      are messy. In Python 2.5 there's a simple way to pass values into
+      a generator. yield became an expression, returning a v...
+  [2] https://docs.python.org/3/howto/functional.html
+      yield and a return statement is that on reaching a yield the
+      generator's state of execution is suspended and local varia...
+  [3] https://docs.python.org/3/howto/functional.html
+      + 12 .) Values are sent into a generator by calling its
+      send(value) method.  This method resumes the generator's code an...
+  [4] https://docs.python.org/3/howto/functional.html
+      GeneratorExit occurs, I suggest using a try: ... finally: suite
+      instead of catching GeneratorExit . The cumulative effec...
+\end{verbatim}
+\end{tcolorbox}
+
 \subsection{Vérification dans LangSmith}
 
 L'arbre d'exécution est nettement plus riche~:
@@ -1267,6 +1452,46 @@ Plus rapide (pas de recalcul)
 les top-3 sont déjà variés, similarité suffit (et c'est plus rapide).
 \end{quote}
 
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+DEMO 3 -- Similarity vs MMR sur la MEME question
+======================================================================
+
+Question : Quelle est la différence entre une liste et un tuple ?
+
+--- Top-3 similarity ---
+  [1] , line 1 , in <module> TypeError : 'tuple' object does not
+      support item assignment >>> # but they ca...
+  [2] >>> list ( x for x in range ( 10 ) if is_even ( x )) [0, 2, 4,
+      6, 8] enumerate(iter, start=0) counts...
+  [3] elements that are accessed via unpacking (see later in this
+      section) or indexing (or even by attribu...
+
+--- Top-3 MMR (diversifié) ---
+  [1] , line 1 , in <module> TypeError : 'tuple' object does not
+      support item assignment >>> # but they ca...
+  [2] 5.1. More on Lists  The list data type has some more methods.
+      Here are all of the methods of list o...
+  [3] sequences of the same type, the lexicographical comparison is
+      carried out recursively.  If all items...
+
+======================================================================
+Observe : MMR évite les doublons sémantiques que retourne la
+similarity pure. Pour une question généraliste comme 'liste vs
+tuple', MMR ramène souvent des chunks plus complémentaires.
+======================================================================
+\end{verbatim}
+\end{tcolorbox}
+
 \subsection{Vérification dans LangSmith}
 
 Pour les deux retrievers, LangSmith affiche le même type de run
@@ -1297,5 +1522,1822 @@ directement, en dehors de la chaîne.
         changer dans \texttt{.as\_retriever(\dots)}.
 \end{enumerate}
 \par}
+
+\part{Pour aller plus loin}
+
+% #####################################################################
+% #####################################################################
+\section{Impact du \texttt{chunk\_size} sur la qualité du RAG}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice bonus 1. Mesurer expérimentalement l'effet du découpage]
+Construis trois vectorstores avec \texttt{chunk\_size} = \texttt{500},
+\texttt{1000}, \texttt{2000} caractères (et \texttt{chunk\_overlap}
+proportionnel, 20\%). Pose la même question précise aux trois et compare
+(a) la longueur moyenne des chunks ramenés, (b) leur pertinence visuelle,
+(c) la qualité de la réponse finale.
+
+\textbf{Contrainte}~: persister les trois index dans des dossiers
+séparés (\texttt{chroma\_db\_500}, etc.) pour éviter de réindexer à
+chaque test.
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Voir \textbf{concrètement} pourquoi le \texttt{chunk\_size} est
+        l'hyperparamètre n\textsuperscript{o}1 de qualité RAG.
+  \item Identifier le compromis \emph{granularité vs contexte}~: petit
+        chunk = retrieval précis mais contexte fragmenté ; gros chunk =
+        contexte riche mais retriever moins discriminant.
+  \item Trouver expérimentalement le sweet spot pour un corpus donné.
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\begin{center}
+\begin{tikzpicture}[node distance=6mm and 10mm]
+  \node[doc] (urls) {URLs Python};
+  \node[block, below=of urls] (loader) {WebBaseLoader.load()};
+
+  \node[block, below left=10mm and 14mm of loader] (s500)  {split chunk=500};
+  \node[block, below=of loader]                    (s1000) {split chunk=1000};
+  \node[block, below right=10mm and 14mm of loader](s2000) {split chunk=2000};
+
+  \node[store, below=of s500]  (db500)  {chroma\_db\_500};
+  \node[store, below=of s1000] (db1000) {chroma\_db\_1000};
+  \node[store, below=of s2000] (db2000) {chroma\_db\_2000};
+
+  \draw[flow] (urls)   -- (loader);
+  \draw[flow] (loader) -- (s500);
+  \draw[flow] (loader) -- (s1000);
+  \draw[flow] (loader) -- (s2000);
+  \draw[flow] (s500)   -- (db500);
+  \draw[flow] (s1000)  -- (db1000);
+  \draw[flow] (s2000)  -- (db2000);
+\end{tikzpicture}
+\end{center}
+
+Trois index isolés, même corpus, paramètre de découpage différent. C'est
+le protocole expérimental le plus simple pour évaluer un hyperparamètre
+en RAG~: \emph{ceteris paribus}, on change une seule variable.
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+from pathlib import Path
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_chroma import Chroma
+from langchain_community.document_loaders import WebBaseLoader
+
+from phase2_rag import (
+    PYTHON_DOCS_URLS, COLLECTION_NAME, get_embeddings, build_rag_chain,
+)
+
+
+def build_vectorstore_with_chunk_size(chunk_size: int, persist_dir: str) -> Chroma:
+    """Construit (ou recharge) un vectorstore avec un chunk_size donné."""
+    embeddings = get_embeddings()
+    if Path(persist_dir).exists():
+        return Chroma(
+            collection_name=COLLECTION_NAME,
+            persist_directory=persist_dir,
+            embedding_function=embeddings,
+        )
+
+    loader = WebBaseLoader(PYTHON_DOCS_URLS)
+    loader.requests_kwargs = {"headers": {"User-Agent": "PyTutor-Edu/0.1"}}
+    raw_docs = loader.load()
+
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=int(chunk_size * 0.2),       # 20% proportionnel
+        separators=["\n\n", "\n", ". ", " ", ""],
+    )
+    chunks = splitter.split_documents(raw_docs)
+
+    return Chroma.from_documents(
+        documents=chunks, embedding=embeddings,
+        collection_name=COLLECTION_NAME, persist_directory=persist_dir,
+    )
+
+
+def exercise_1() -> None:
+    configs = [
+        (500,  "./chroma_db_500"),
+        (1000, "./chroma_db_1000"),
+        (2000, "./chroma_db_2000"),
+    ]
+    question = "Comment lève-t-on une exception personnalisée en Python ?"
+
+    for chunk_size, persist_dir in configs:
+        print(f"\n--- chunk_size = {chunk_size} ---")
+        vs = build_vectorstore_with_chunk_size(chunk_size, persist_dir)
+        retriever = vs.as_retriever(search_kwargs={"k": 3})
+
+        docs = retriever.invoke(question)
+        avg_len = sum(len(d.page_content) for d in docs) // len(docs)
+        print(f"  Longueur moyenne des chunks : {avg_len} caractères")
+
+        chain = build_rag_chain(retriever)
+        answer = chain.invoke(question)
+        print(f"  Réponse : {answer[:300]}...")
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — Le compromis granularité vs contexte}
+
+\begin{center}
+\begin{tabular}{p{2.5cm} p{5cm} p{5cm}}
+\toprule
+\textbf{\texttt{chunk\_size}} & \textbf{Avantages} & \textbf{Inconvénients} \\
+\midrule
+\textbf{500}
+& Recherche précise (chaque chunk est ciblé)
+& Contexte fragmenté, le modèle manque l'environnement de l'idée \\[1mm]
+\textbf{1000} (défaut)
+& Bon compromis pour de la doc technique
+& — \\[1mm]
+\textbf{2000}
+& Contexte riche, chunks auto-suffisants
+& Beaucoup de bruit, le retriever distingue mal pertinent / tangentiel \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection*{Étape 2 — Mesurer plutôt que deviner}
+
+L'effet du \texttt{chunk\_size} dépend du corpus. Sur la doc Python
+(passages bien structurés, paragraphes courts), 1000 est optimal. Sur
+des transcripts de conférences (idées qui s'étalent sur plusieurs
+paragraphes), 1500--2000 peut être meilleur. \textbf{Mesure} pour ton
+corpus.
+
+\begin{quote}\itshape
+Le bon outil de mesure n'est pas la longueur ni le nombre de chunks~:
+c'est la \textbf{qualité subjective des réponses} sur un échantillon
+de questions représentatives. Construis un mini-jeu de 10 questions
+typiques et compare les réponses.
+\end{quote}
+
+\subsubsection*{Étape 3 — Le \texttt{chunk\_overlap} proportionnel}
+
+On garde \texttt{chunk\_overlap = 0.2 \(\times\) chunk\_size}~: 20\%
+de chevauchement entre chunks consécutifs. C'est une bonne valeur
+\emph{par défaut} qui évite de couper une idée en deux sans gonfler
+excessivement la taille de l'index.
+
+\subsubsection*{Étape 4 — Persister chaque variante}
+
+Réindexer prend du temps. En persistant dans des dossiers séparés
+(\texttt{chroma\_db\_500}, etc.), on peut~:
+\begin{itemize}[leftmargin=*]
+  \item Comparer les variantes rapidement (rechargement $<$1~s chacun).
+  \item Garder un environnement reproductible.
+  \item Faire le test une fois, l'oublier.
+\end{itemize}
+
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 1 -- Impact du chunk_size sur la qualité du RAG
+======================================================================
+
+--- chunk_size = 500 ---
+  -> Indexation chunk_size=500 dans ./chroma_db_500...
+    -> 658 chunks générés
+  Longueur moyenne des chunks retrouvés : 472 caractères
+  [1] ) # arguments stored in .args ... print ( inst ) # __str__
+      allows args to be pri...
+  [2] >>> try : ... raise TypeError ( 'bad type' ) ... except
+      Exception as e : ... e ....
+  [3] know where to look in case the input came from a file. 8.2.
+      Exceptions   Even if...
+
+  Réponse :
+  # Lever une exception personnalisée en Python
+
+  D'après le contexte fourni, je peux te montrer comment lever une
+  exception en utilisant le mot-clé `raise` [2].
+
+  ## Syntaxe de base
+
+  ```python
+  raise TypeException('message')
+  ```
+  ...
+
+--- chunk_size = 1000 ---
+  -> Indexation chunk_size=1000 dans ./chroma_db_1000...
+    -> 327 chunks générés
+  Longueur moyenne des chunks retrouvés : 981 caractères
+  [1] except Exception as inst : ... print ( type ( inst )) # the
+      exception type ... p...
+  [2] They include SystemExit which is raised by sys.exit() and
+      KeyboardInterrupt whic...
+  [3] err =} , { type ( err ) =} " ) raise The try ... except
+      statement has an optional ...
+
+  Réponse :
+  Je dois être honnête : **la réponse à ta question n'est pas
+  présente dans le contexte fourni.**
+
+  Le contexte [1], [2] et [3] explique comment :
+  - **Capturer** des exceptions avec `try...except`
+  - **Accéder** aux informations d'une exception
+  - **Re-lever** une exception avec...
+
+--- chunk_size = 2000 ---
+  -> Indexation chunk_size=2000 dans ./chroma_db_2000...
+    -> 165 chunks générés
+  Longueur moyenne des chunks retrouvés : 1977 caractères
+  [1] ( inst . args ) # arguments stored in .args ... print ( inst )
+      # __str__ allows ...
+  [2] # shorthand for 'raise ValueError()' If you need to determine
+      whether an excepti...
+  [3] +-+---------------- 1 ---------------- | OSError: error 1
+      +---------------- 2 --...
+
+  Réponse :
+  # Comment lever une exception personnalisée en Python ?
+
+  D'après le contexte fourni, je peux te montrer comment lever une
+  exception en Python, mais la documentation ne couvre pas
+  explicitement la création d'exceptions personnalisées.
+  ...
+
+----------------------------------------------------------------------
+OBSERVATIONS A RETENIR :
+ - chunk=500  : chunks précis mais souvent incomplets, le modèle
+   peut manquer le contexte autour du détail recherché.
+ - chunk=1000 : le bon défaut pour de la doc technique.
+ - chunk=2000 : beaucoup de bruit, le retriever distingue mal
+   les passages pertinents des passages tangentiels.
+\end{verbatim}
+\end{tcolorbox}
+
+\subsection{Vérification dans LangSmith}
+
+Pour chaque \texttt{chunk\_size}, lance la même question et compare les
+runs côte-à-côte. Trois choses se révèlent~:
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Tokens du prompt}~: \texttt{chunk\_size=500} avec
+        \texttt{k=3} donne $\sim$1500 tokens de contexte ;
+        \texttt{chunk\_size=2000} donne $\sim$6000.
+  \item \textbf{Pertinence des chunks}~: lisible dans l'output du
+        retriever.
+  \item \textbf{Qualité de la réponse}~: peut être annotée manuellement
+        dans LangSmith (\emph{thumbs up/down}) pour mémoriser l'évaluation.
+\end{enumerate}
+
+\begin{quote}\itshape
+Le coût en tokens monte vite avec le \texttt{chunk\_size}~: à
+\texttt{k=3}, passer de 1000 à 2000 caractères double le coût par
+requête sans nécessairement améliorer la qualité. Optimise.
+\end{quote}
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item Le \texttt{chunk\_size} est l'hyperparamètre n\textsuperscript{o}1
+        de qualité RAG. Mesure, ne devine pas.
+  \item Sweet spot général pour de la doc technique~: \textbf{800--1200
+        caractères}, \texttt{overlap} = 20\%.
+  \item Petit chunk~: précis mais fragmenté. Gros chunk~: riche mais
+        bruité.
+  \item Persiste chaque variante dans son dossier pour comparer sans
+        réindexer.
+  \item Le coût en tokens augmente linéairement avec \texttt{chunk\_size
+        \(\times\) k}.
+\end{enumerate}
+\par}
+
+% #####################################################################
+% #####################################################################
+\section{Boucle interactive : transformer le RAG en mini-CLI}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice bonus 2. Une boucle while pour explorer la doc librement]
+Transforme la chaîne RAG en une petite REPL (\emph{Read-Eval-Print Loop})~:
+une boucle \texttt{while} qui demande une question à l'utilisateur via
+\texttt{input()}, appelle la chaîne, affiche la réponse \textbf{et les
+sources}, puis recommence. Termine proprement sur ligne vide ou
+\texttt{Ctrl+C}.
+
+\textbf{Contrainte}~: utiliser \texttt{build\_rag\_chain\_with\_sources}
+de l'exercice 4 pour afficher les sources, et gérer les exceptions
+\texttt{EOFError} / \texttt{KeyboardInterrupt} pour une sortie propre.
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Construire une mini-CLI qui sert de banc de test pour explorer
+        son corpus librement.
+  \item Gérer la terminaison propre (signal et ligne vide).
+  \item Préparer mentalement la transition vers une UI web (Gradio,
+        Streamlit) où la boucle d'événements est cachée par le framework.
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\begin{center}
+\begin{tikzpicture}[node distance=6mm and 10mm]
+  \node[block] (start) {Démarrage};
+  \node[block, below=of start] (load) {build\_or\_load\_vectorstore\\\scriptsize une seule fois};
+  \node[block, below=of load] (chain) {build\_rag\_chain\_with\_sources};
+
+  \node[data, below=of chain] (prompt) {\texttt{❯} input()};
+  \node[block, below=of prompt] (invoke) {chain.invoke(question)};
+  \node[data, below=of invoke] (display) {print(answer)\\print(sources)};
+
+  \draw[flow] (start)  -- (load);
+  \draw[flow] (load)   -- (chain);
+  \draw[flow] (chain)  -- (prompt);
+  \draw[flow] (prompt) -- (invoke);
+  \draw[flow] (invoke) -- (display);
+  \draw[flow, dashed, draw=orange!70!black] (display.east) ..controls +(2,0) and +(2,0).. (prompt.east)
+       node[label, midway, right]{boucle};
+\end{tikzpicture}
+\end{center}
+
+Trois éléments importants pour la performance perçue~: charger le store
+\textbf{une seule fois} (lent), construire la chaîne \textbf{une seule
+fois}, et la réutiliser en boucle pour chaque question (rapide).
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+from phase2_rag import build_or_load_vectorstore, build_rag_chain_with_sources
+
+
+def exercise_2_interactive() -> None:
+    print("PyTutor — mode interactif (Ctrl+C ou ligne vide pour quitter)")
+
+    # On charge le store et on construit la chaîne UNE SEULE FOIS
+    vectorstore = build_or_load_vectorstore()
+    retriever   = vectorstore.as_retriever(search_kwargs={"k": 4})
+    chain       = build_rag_chain_with_sources(retriever)
+
+    while True:
+        try:
+            question = input("\n❯ ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nÀ la prochaine !")
+            break
+
+        if not question:
+            print("Au revoir.")
+            break
+
+        result = chain.invoke(question)
+
+        print("\n" + "─" * 70)
+        print(result["answer"])
+        print("─" * 70)
+        print("Sources :")
+        for i, doc in enumerate(result["context"], 1):
+            src = doc.metadata.get("source", "?").split("/")[-1]
+            print(f"  [{i}] {src}")
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — Init coûteux, hors de la boucle}
+
+\begin{pythoncode}
+vectorstore = build_or_load_vectorstore()         # 1s (rechargement)
+retriever   = vectorstore.as_retriever(...)       # instantané
+chain       = build_rag_chain_with_sources(...)   # instantané
+# Boucle après l'init :
+while True:
+    ...
+\end{pythoncode}
+
+Pattern universel des REPL~: tout ce qui est lent (chargement, parsing,
+initialisation) se fait \textbf{une fois} avant la boucle. Dans la
+boucle, chaque tour ne fait que ce qui dépend de l'input.
+
+\subsubsection*{Étape 2 — Gérer les sorties propres}
+
+Trois façons pour l'utilisateur de quitter~:
+
+\begin{itemize}[leftmargin=*]
+  \item \texttt{Ctrl+C}~: \texttt{input()} lève \texttt{KeyboardInterrupt}.
+  \item \texttt{Ctrl+D} (EOF)~: \texttt{input()} lève \texttt{EOFError}.
+  \item \textbf{Ligne vide}~: \texttt{input()} renvoie \texttt{""}, qu'on
+        traite explicitement.
+\end{itemize}
+
+Le \texttt{try/except} attrape les deux premiers, le \texttt{if not
+question} attrape le troisième.
+
+\begin{quote}\itshape
+Sans \texttt{try/except}, un \texttt{Ctrl+C} propage une trace Python
+disgracieuse à l'utilisateur. L'attraper et imprimer un message
+amical (« À la prochaine ! ») est la marque du logiciel poli.
+\end{quote}
+
+\subsubsection*{Étape 3 — Affichage avec sources}
+
+\texttt{build\_rag\_chain\_with\_sources} renvoie un dict avec
+\texttt{answer}, \texttt{context}, \texttt{question}. On affiche~:
+\begin{itemize}[leftmargin=*]
+  \item La réponse, encadrée d'une ligne pour la séparer visuellement
+        du prompt.
+  \item Les sources, chacune avec son fichier (\texttt{.split("/")[-1]}
+        pour ne garder que le \emph{basename}).
+\end{itemize}
+
+\subsubsection*{Étape 4 — Vers une UI web}
+
+Cette mini-CLI est la base mentale d'une UI :
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Gradio} :
+\begin{pythoncode}
+import gradio as gr
+gr.Interface(
+    fn=lambda q: chain.invoke(q)["answer"],
+    inputs="text", outputs="text",
+).launch()
+\end{pythoncode}
+  \item \textbf{Streamlit}~: \texttt{st.text\_input}, \texttt{st.write}.
+  \item \textbf{FastAPI}~: un endpoint \texttt{POST /ask} qui retourne
+        le dict en JSON.
+\end{itemize}
+
+Dans tous les cas, la chaîne RAG reste un \texttt{Runnable} inchangé~:
+on remplace juste l'interface utilisateur autour.
+
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 2 -- Mode interactif (Ctrl+C ou ligne vide pour quitter)
+======================================================================
+[OK] Rechargement de l'index depuis ./chroma_db
+
+PyTutor est prêt. Pose une question sur Python.
+
+> c'est quoi les fonctions décorées?
+
+----------------------------------------------------------------------
+# Les fonctions décorées
+
+Une **fonction décorée** est une fonction qui a été transformée par
+un **décorateur**. [1]
+
+## Qu'est-ce qu'un décorateur ?
+
+Un décorateur est une fonction qui retourne une autre fonction. Il
+est généralement appliqué comme une transformation de fonction en
+utilisant la syntaxe `@nom_du_decorateur`. [1]
+
+## Exemple simple
+
+Voici deux façons équivalentes de décorer une fonction : [1]
+
+**Syntaxe avec `@` (sucre syntaxique):**
+```python
+@staticmethod
+def f(arg):
+    ...
+```
+
+**Syntaxe sans `@` (équivalent):**
+```python
+def f(arg):
+    ...
+f = staticmethod(f)
+```
+
+Les deux approches font exactement la même chose : elles appliquent
+le décorateur `staticmethod` à la fonction `f`.
+
+## Exemples courants
+
+Les décorateurs les plus courants en Python sont : [1]
+- `@classmethod`
+- `@staticmethod`
+
+Ces décorateurs modifient le comportement de la fonction en la
+transformant.
+----------------------------------------------------------------------
+Sources :
+  [1] glossary.html
+  [2] errors.html
+  [3] controlflow.html
+  [4] errors.html
+
+>
+Au revoir.
+\end{verbatim}
+\end{tcolorbox}
+
+\subsection{Vérification dans LangSmith}
+
+Chaque appel à \texttt{chain.invoke(\dots)} produit \textbf{une trace
+distincte} dans LangSmith. C'est un super outil pour~:
+\begin{itemize}[leftmargin=*]
+  \item Repérer les questions qui ont mal marché.
+  \item Comparer plusieurs reformulations d'une même question.
+  \item Annoter manuellement les bonnes/mauvaises réponses
+        (\emph{thumbs up/down}) pour évaluer ton RAG.
+\end{itemize}
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item Pattern REPL~: init coûteux \textbf{hors} de la boucle, traitement
+        rapide \textbf{dans} la boucle.
+  \item Gérer la terminaison propre~: \texttt{EOFError},
+        \texttt{KeyboardInterrupt}, et ligne vide.
+  \item Une CLI interactive est le meilleur banc de test pour explorer
+        son corpus et identifier les angles morts.
+  \item La chaîne RAG reste inchangée quand on passe à une UI web — c'est
+        l'interface qui change, pas le \texttt{Runnable}.
+\end{enumerate}
+\par}
+
+% #####################################################################
+% #####################################################################
+\section{Prompt strict pour refuser le hors-contexte}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice bonus 3. Bloquer les hallucinations polies]
+Pose une question dont la réponse \textbf{n'est pas} dans les pages
+indexées (par exemple~: \emph{« Comment installer un package avec
+pip~? »}, sachant que la doc indexée couvre tutoriel + glossaire, pas
+l'installation). Observe le comportement par défaut. Puis durcis le
+prompt système pour que le modèle refuse explicitement de répondre
+hors-contexte.
+
+\textbf{Contrainte}~: garder la même chaîne LCEL, juste swap le prompt.
+Le prompt strict doit \textbf{aussi} bien marcher sur des questions
+in-context (ne pas être excessivement restrictif).
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Reconnaître l'\emph{hallucination polie}~: le modèle complète
+        avec ses connaissances générales quand le contexte ne suffit pas.
+  \item Construire un prompt \textbf{défensif} avec règles numérotées
+        et exemples de refus.
+  \item Vérifier que le refus est exploitable en aval (router vers une
+        autre source d'info, par exemple).
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\begin{center}
+\begin{tikzpicture}[node distance=5mm and 12mm]
+  \node[data] (q) {"Comment installer pip ?"};
+
+  \node[block, below left=10mm and 14mm of q]  (def)    {RAG\_PROMPT\\\scriptsize (défaut)};
+  \node[block, below right=10mm and 14mm of q] (strict) {STRICT\_RAG\_PROMPT\\\scriptsize (5 règles absolues)};
+
+  \node[llm, below=of def]    (mdef)   {Modèle};
+  \node[llm, below=of strict] (mstr)   {Modèle};
+
+  \node[data, below=of mdef, fill=red!10] (rdef)
+       {"Pour installer pip, lance\\\textbf{python -m ensurepip\dots}"\\\scriptsize (HALLUCINATION)};
+  \node[data, below=of mstr, fill=green!10] (rstr)
+       {"Cette information n'est pas\\dans la documentation fournie."\\\scriptsize (REFUS NET)};
+
+  \draw[flowdata] (q)    -- (def);
+  \draw[flowdata] (q)    -- (strict);
+  \draw[flow]     (def)  -- (mdef);
+  \draw[flow]     (strict)-- (mstr);
+  \draw[flow]     (mdef) -- (rdef);
+  \draw[flow]     (mstr) -- (rstr);
+\end{tikzpicture}
+\end{center}
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
+from config import get_model
+from phase2_rag import format_docs
+
+
+STRICT_RAG_PROMPT = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        "Tu réponds EXCLUSIVEMENT à partir du contexte fourni ci-dessous. "
+        "Règles absolues :\n"
+        "1. Si la réponse n'apparaît pas littéralement dans le contexte, "
+        "tu réponds : 'Cette information n'est pas dans la documentation fournie.' "
+        "et tu t'arrêtes.\n"
+        "2. Tu ne complètes JAMAIS avec tes connaissances générales sur Python.\n"
+        "3. Tu ne fais JAMAIS d'inférence en partant d'un sujet voisin.\n"
+        "4. Si tu utilises le contexte, cite les chunks par leur numéro [N].\n"
+        "5. Si le contexte est ambigu ou partiel, dis explicitement ce qui "
+        "manque plutôt que d'extrapoler."
+    ),
+    (
+        "human",
+        "Contexte :\n{context}\n\nQuestion : {question}",
+    ),
+])
+
+
+def build_strict_rag_chain(retriever):
+    return (
+        {
+            "context":  retriever | format_docs,
+            "question": RunnablePassthrough(),
+        }
+        | STRICT_RAG_PROMPT
+        | get_model()
+        | StrOutputParser()
+    )
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — L'hallucination polie}
+
+Sans contraintes explicites, un LLM moderne complète volontiers ses
+réponses avec ses connaissances générales~: c'est ce qu'il a appris à
+faire pour être « utile ». Sur une question hors-corpus, il va~:
+
+\begin{itemize}[leftmargin=*]
+  \item Ignorer (ou paraphraser) le contexte non pertinent.
+  \item Sortir une réponse plausible et fluide à partir de ses
+        \emph{connaissances pré-entraînées}.
+  \item Ne pas mentionner que cette réponse ne vient PAS du contexte.
+\end{itemize}
+
+C'est l'\emph{hallucination polie}~: la réponse est techniquement
+correcte, mais elle vient d'une source non-traçable. En contexte
+pédagogique, c'est exactement ce qu'on veut éviter.
+
+\subsubsection*{Étape 2 — Le pattern \emph{règles absolues numérotées}}
+
+\begin{pythoncode}
+"Règles absolues :
+1. Si la réponse n'apparaît pas littéralement dans le contexte, ...
+2. Tu ne complètes JAMAIS avec tes connaissances générales sur Python.
+3. Tu ne fais JAMAIS d'inférence en partant d'un sujet voisin.
+4. Si tu utilises le contexte, cite les chunks par leur numéro [N].
+5. Si le contexte est ambigu ou partiel, dis explicitement ce qui manque."
+\end{pythoncode}
+
+Cinq caractéristiques d'un prompt défensif efficace~:
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Numérotation}~: les modèles obéissent mieux à des règles
+        listées qu'à un paragraphe.
+  \item \textbf{Capitales}~: \texttt{EXCLUSIVEMENT}, \texttt{JAMAIS}.
+        Effet psychologique mesurable sur les LLM modernes.
+  \item \textbf{Phrase exacte de refus}~: « Cette information n'est pas
+        dans la documentation fournie. » — le modèle a un \emph{template}
+        à recracher, pas à inventer.
+  \item \textbf{Couverture explicite des cas voisins}~: règle 3 anti-
+        inférence (« cite-moi un sujet proche »), règle 5 anti-vague.
+  \item \textbf{Garder la consigne positive}~: règle 4 sur les citations,
+        pour ne pas écraser le bon comportement par excès de restrictions.
+\end{itemize}
+
+\subsubsection*{Étape 3 — Vérifier la non-restriction excessive}
+
+Un piège classique des prompts stricts~: ils deviennent \emph{trop}
+restrictifs et refusent même des questions dont la réponse est dans
+le contexte. Test de contrôle indispensable~:
+
+\begin{pythoncode}
+in_context = "Qu'est-ce qu'un itérable en Python ?"      # dans le glossaire
+print(chain_strict.invoke(in_context))                   # doit répondre normalement
+\end{pythoncode}
+
+Si le prompt strict refuse cette question, c'est qu'il est mal calibré
+— il faut adoucir le ton sans perdre la rigueur sur le hors-contexte.
+
+\subsubsection*{Étape 4 — Le refus exploitable}
+
+L'intérêt d'un refus net (toujours la même phrase) plutôt que d'un
+brouillon hallucinant~: le \emph{code applicatif} peut le détecter
+et router~:
+
+\begin{pythoncode}
+answer = chain_strict.invoke(question)
+if "Cette information n'est pas dans la documentation" in answer:
+    # router vers une recherche web, un autre corpus, etc.
+    fallback_chain.invoke(question)
+\end{pythoncode}
+
+\begin{quote}\itshape
+Un bon refus est \textbf{exploitable en aval}. L'hallucination polie ne
+l'est pas — il est impossible de savoir programmatiquement si la
+réponse est sourcée ou inventée. Toute architecture RAG sérieuse force
+le refus.
+\end{quote}
+
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 3 -- Prompt strict vs prompt par défaut
+======================================================================
+[OK] Rechargement de l'index depuis ./chroma_db
+
+Question (HORS contexte) : Comment installer le package `requests`
+                            avec pip ?
+
+--- Prompt PAR DEFAUT ---
+Je ne peux pas répondre à cette question en m'appuyant sur le
+contexte fourni.
+
+Le contexte contient des informations sur le glossaire Python, le
+chemin de recherche des modules (`sys.path`), les objets de type
+chemin (`path-like object`), et les packages Python, mais il ne
+contient aucune information sur l'installation de packages avec pip.
+
+Pour répondre à ta question sur l'installation de `requests` avec
+pip, il faudrait un contexte qui traite de la gestion des packages
+et de l'outil pip, ce qui n'est pas disponible ici.
+
+--- Prompt STRICT ---
+Cette information n'est pas dans la documentation fournie.
+
+Le contexte fourni traite de concepts comme les modules Python, le
+chemin de recherche des modules (`sys.path`), les packages et les
+PEPs, mais il ne contient aucune information sur l'installation de
+packages avec pip.
+
+
+Question (DANS contexte, contrôle) : Qu'est-ce qu'un itérable en
+                                      Python ?
+
+--- Prompt STRICT ---
+Selon la documentation fournie [2], un **itérable** est :
+
+> Un objet capable de retourner ses membres un à un.
+
+Les exemples d'itérables incluent :
+- Tous les types de séquences (comme `list`, `str`, et `tuple`)
+- Certains types non-séquences comme `dict` et les objets fichier
+- Les objets de classes que vous définissez avec une méthode
+  `__iter__()` ou une méthode `__getitem__()` qui implémente la
+  sémantique de séquence
+
+Les itérables peuvent être utilisés dans une boucle `for` et dans
+de nombreux autres contextes où une séquence est nécessaire
+(`zip()`, `map()`, etc.). Quand un objet itérable est passé à la
+fonction intégrée `iter()`, elle retourne un itérateur pour cet
+objet [2].
+
+----------------------------------------------------------------------
+OBSERVATIONS A RETENIR :
+ - Sans contrainte explicite, le modèle a tendance à 'aider' en
+   complétant avec ses connaissances. C'est utile en chat général,
+   c'est un BUG en RAG.
+ - Le prompt strict rend le refus net et exploitable en aval
+   (tu peux router vers une autre source d'info, par exemple).
+\end{verbatim}
+\end{tcolorbox}
+
+\subsection{Vérification dans LangSmith}
+
+Lance la même question hors-contexte avec les deux prompts. Dans
+LangSmith~:
+\begin{enumerate}[leftmargin=*]
+  \item Compare les \emph{outputs} côte-à-côte~: l'un parle de pip,
+        l'autre refuse.
+  \item Compare les \emph{system prompts}~: le strict a 4-5 fois plus
+        de tokens (pour mémoire, $\sim$200 tokens supplémentaires).
+  \item Compare les \emph{tokens de sortie}~: le refus est court ($\sim$30
+        tokens), l'hallucination est longue ($\sim$300 tokens). Le prompt
+        strict réduit la facture sur les requêtes hors-corpus.
+\end{enumerate}
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item L'\emph{hallucination polie} est le piège n\textsuperscript{o}1
+        du RAG~: le modèle complète sans le dire avec ses connaissances
+        générales.
+  \item Prompt défensif efficace~: règles \textbf{numérotées},
+        \textbf{capitales} sur les interdictions, phrase exacte de refus,
+        couverture des cas voisins.
+  \item Toujours tester avec une question \textbf{in-context} aussi, pour
+        ne pas créer un prompt trop restrictif.
+  \item Un refus net (phrase canonique) est \textbf{exploitable en aval}~:
+        on peut router vers une autre source.
+  \item Coût~: prompt système $\sim$200 tokens en plus, mais réponse
+        plus courte sur hors-contexte $\to$ facture similaire ou inférieure.
+\end{enumerate}
+\par}
+
+% #####################################################################
+% #####################################################################
+\section{Vérifier et exploiter LangSmith}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice bonus 4. Activer le tracing et lire l'arbre d'exécution]
+Configure LangSmith dans ton \texttt{.env}, exécute une chaîne RAG, et
+explore l'arbre d'exécution dans l'UI \texttt{smith.langchain.com}.
+Vérifie programmatiquement la présence des variables d'environnement
+nécessaires.
+
+\textbf{Contrainte}~: l'exercice doit afficher un message d'aide clair
+si la config est manquante (variables \texttt{LANGSMITH\_TRACING},
+\texttt{LANGSMITH\_API\_KEY}, \texttt{LANGSMITH\_PROJECT}), avec les
+lignes à ajouter au \texttt{.env}.
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Configurer LangSmith~: variables d'environnement et endpoint
+        EU vs US.
+  \item Lire l'arbre d'exécution d'une chaîne RAG~: les branches du
+        \texttt{RunnableParallel}, le \texttt{format\_docs}, le prompt
+        rendu, l'appel modèle, le parser.
+  \item Apprendre à \textbf{utiliser LangSmith comme principale source
+        de vérité} sur le comportement d'une chaîne (pas le code, pas
+        les logs).
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\begin{center}
+\begin{tikzpicture}[node distance=5mm and 14mm]
+  \node[data] (env) {.env\\\scriptsize LANGSMITH\_TRACING=true\\\scriptsize LANGSMITH\_API\_KEY=...\\\scriptsize LANGSMITH\_PROJECT=PyTutor2};
+  \node[block, below=of env] (script) {python script.py};
+  \node[block, below=of script] (chain) {chain.invoke(\dots)};
+
+  \node[block, right=20mm of chain] (api) {API LangSmith};
+  \node[store, above=of api] (cloud) {smith.langchain.com\\\scriptsize traces persistées};
+
+  \draw[flowdata] (env)    -- (script);
+  \draw[flow]     (script) -- (chain);
+  \draw[flow]     (chain)  -- (api) node[label, midway, above]{trace envoyée};
+  \draw[flow]     (api)    -- (cloud);
+\end{tikzpicture}
+\end{center}
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+import os
+from phase2_rag import build_or_load_vectorstore, build_rag_chain_with_sources
+
+
+def exercise_4_langsmith() -> None:
+    # --- Vérification de la configuration ---
+    tracing = os.getenv("LANGSMITH_TRACING", "").lower() in {"true", "1"}
+    api_key = os.getenv("LANGSMITH_API_KEY")
+    project = os.getenv("LANGSMITH_PROJECT", "default")
+
+    print(f"LANGSMITH_TRACING : {'✓ activé' if tracing else '✗ NON activé'}")
+    print(f"LANGSMITH_API_KEY : {'✓ présente' if api_key else '✗ absente'}")
+    print(f"LANGSMITH_PROJECT : {project}")
+
+    if not (tracing and api_key):
+        print("→ Ajoute dans .env :")
+        print("    LANGSMITH_TRACING=true")
+        print("    LANGSMITH_API_KEY=lsv2_pt_...")
+        print("    LANGSMITH_PROJECT=PyTutor2")
+        print("    LANGSMITH_ENDPOINT=https://eu.api.smith.langchain.com  # si compte EU")
+        return
+
+    # --- Exécution d'une chaîne pour générer une trace ---
+    vectorstore = build_or_load_vectorstore()
+    retriever   = vectorstore.as_retriever(search_kwargs={"k": 4})
+    chain       = build_rag_chain_with_sources(retriever)
+
+    result = chain.invoke("Comment écrire un générateur infini en Python ?")
+    print(result["answer"][:300] + "...")
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — Les 3 variables d'environnement essentielles}
+
+\begin{center}
+\begin{tabular}{p{4.5cm} p{10cm}}
+\toprule
+\textbf{Variable} & \textbf{Rôle} \\
+\midrule
+\texttt{LANGSMITH\_TRACING}
+& \texttt{"true"} pour activer l'envoi automatique des traces. Sans ça,
+  les chaînes s'exécutent normalement mais rien n'est envoyé. \\[1mm]
+\texttt{LANGSMITH\_API\_KEY}
+& Clé personnelle (commence par \texttt{lsv2\_pt\_\dots}). À créer sur
+  \texttt{smith.langchain.com} (gratuit). \\[1mm]
+\texttt{LANGSMITH\_PROJECT}
+& Nom du projet où les traces seront groupées. Ex.~: \texttt{PyTutor2}. \\[1mm]
+\texttt{LANGSMITH\_ENDPOINT} & Optionnel.
+\texttt{https://eu.api.smith.langchain.com} pour un compte EU
+(défaut~: US). \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection*{Étape 2 — Vérification programmatique}
+
+Lire \texttt{os.getenv} avec un défaut explicite, et tester~:
+
+\begin{pythoncode}
+tracing = os.getenv("LANGSMITH_TRACING", "").lower() in {"true", "1"}
+api_key = os.getenv("LANGSMITH_API_KEY")
+\end{pythoncode}
+
+Avantage~: l'utilisateur voit \emph{exactement} ce qui manque et a les
+lignes à coller dans son \texttt{.env}.
+
+\subsubsection*{Étape 3 — L'arbre dans l'UI}
+
+Sur \texttt{smith.langchain.com}, ouvre ton projet et clique sur ta
+trace la plus récente. Le panneau gauche montre l'arbre d'exécution
+avec, pour la chaîne RAG~:
+
+\begin{enumerate}[leftmargin=*]
+  \item Le \texttt{RunnableParallel} (les 2 branches \texttt{context}
+        et \texttt{question}).
+  \item Le \texttt{Retriever} (avec sa query exacte et la liste de docs).
+  \item Le \texttt{format\_docs} (un \texttt{RunnableLambda}).
+  \item Le \texttt{ChatPromptTemplate} (avec le prompt rendu, texte
+        complet envoyé au LLM).
+  \item L'\texttt{appel modèle} (avec tokens consommés, latence, coût \$).
+  \item Le \texttt{StrOutputParser}.
+\end{enumerate}
+
+\subsubsection*{Étape 4 — Pourquoi LangSmith est plus utile que les
+logs Python}
+
+\begin{center}
+\begin{tabular}{p{6.5cm} p{6.5cm}}
+\toprule
+\textbf{Logs Python (\texttt{print}, \texttt{logging})} & \textbf{LangSmith} \\
+\midrule
+Manuel~: tu choisis quoi logger.
+& Automatique~: tracé pour chaque \texttt{Runnable}. \\[1mm]
+Texte brut, dispersé sur stdout/fichier.
+& UI structurée, recherchable, partagable. \\[1mm]
+Pas de versionnage ni d'historique.
+& Toutes les traces archivées avec timestamp. \\[1mm]
+Pas de coût/latence agrégés.
+& Onglets dédiés \emph{Costs}, \emph{Latency}, \emph{Tokens}. \\[1mm]
+Tu vois ce que TU as choisi de logger.
+& Tu vois \textbf{exactement ce que le modèle a vu}. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{quote}\itshape
+LangSmith devient la principale source de vérité dès qu'on travaille
+sur une chaîne sérieuse. Les \texttt{print} restent utiles pour le
+local quick-and-dirty, mais la moindre investigation passe par l'UI.
+\end{quote}
+
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 4 -- Tracer une exécution dans LangSmith
+======================================================================
+
+LANGSMITH_TRACING : [OK] activé
+LANGSMITH_API_KEY : [OK] présente
+LANGSMITH_PROJECT : PyTutor2
+
+Exécution d'une chaîne RAG (la trace sera envoyée à LangSmith)...
+[OK] Rechargement de l'index depuis ./chroma_db
+
+Réponse :
+# Comment écrire un générateur infini en Python ?
+
+Je dois te dire que **la réponse à cette question n'est pas
+présente dans le contexte fourni**.
+
+Le contexte explique comment fonctionnent les générateurs en
+général [3,4] : ce sont des fonctions qui utilisent `yield` pour
+retourner des valeurs une...
+
+----------------------------------------------------------------------
+CE QU'IL FAUT REGARDER DANS L'UI :
+  1. Va sur https://smith.langchain.com et ouvre le projet 'PyTutor2'
+  2. Tu vois ta dernière trace. Clique dessus.
+  3. Le panneau de gauche montre l'arbre d'exécution :
+     - le RunnableParallel 'context' + 'question' (les 2 branches
+       partent en parallèle)
+     - puis le format_docs (RunnableLambda)
+     - puis le prompt formatté (regarde le texte exact envoyé)
+     - puis l'appel au modèle (avec coût et latence)
+     - puis le parser
+  4. Clique sur l'appel modèle pour voir les tokens consommés
+     et le prompt exact, sans rien deviner.
+\end{verbatim}
+\end{tcolorbox}
+
+\subsection{Vérification dans LangSmith}
+
+\emph{(Cet exercice EST la vérification.)}
+
+À regarder dans l'UI~:
+\begin{itemize}[leftmargin=*]
+  \item L'onglet \emph{Runs} liste toutes les traces récentes.
+  \item Le panneau de \emph{détail} d'une trace montre l'arbre.
+  \item L'onglet \emph{Costs} montre le coût \$ et les tokens.
+  \item L'onglet \emph{Annotations} permet de noter manuellement
+        les bonnes/mauvaises réponses (\emph{thumbs up/down}).
+\end{itemize}
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item 3 variables d'env essentielles~: \texttt{LANGSMITH\_TRACING=true},
+        \texttt{LANGSMITH\_API\_KEY=lsv2\_pt\_\dots},
+        \texttt{LANGSMITH\_PROJECT=ton-projet}.
+  \item Compte EU~: ajouter
+        \texttt{LANGSMITH\_ENDPOINT=https://eu.api.smith.langchain.com}.
+  \item Vérification programmatique au démarrage de l'app~: meilleure
+        UX que de découvrir l'absence de trace plus tard.
+  \item L'UI LangSmith devient la principale source de vérité~: arbre
+        d'exécution, prompts rendus, coût, latence.
+  \item Annoter manuellement avec \emph{thumbs up/down} crée un dataset
+        d'évaluation gratuit.
+\end{enumerate}
+\par}
+
+% #####################################################################
+% #####################################################################
+\section{\texttt{MultiQueryRetriever} : reformuler la question}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice bonus 5. Améliorer le recall avec un LLM en amont]
+Remplace le \texttt{Retriever} simple par un \texttt{MultiQueryRetriever}
+qui reformule chaque question utilisateur en 3 variantes via un LLM
+\textbf{avant} la recherche, puis fusionne les résultats des 3 recherches.
+Compare sur une question volontairement courte/ambiguë (ex.~: \emph{«
+Comment marche l'héritage~? »}).
+
+\textbf{Contrainte}~: activer le logging du module
+\texttt{langchain.retrievers.multi\_query} pour voir les reformulations
+générées par le LLM dans le terminal.
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Comprendre la notion de \emph{recall} en information retrieval
+        (retrouver toutes les bonnes infos, pas juste les plus
+        pertinentes en surface).
+  \item Utiliser un LLM pour \textbf{augmenter} la question utilisateur
+        (et non pour répondre).
+  \item Mesurer le coût supplémentaire (1 appel LLM de reformulation +
+        N recherches au lieu d'une).
+  \item Savoir quand utiliser MultiQuery~: questions courtes / ambiguës ;
+        et quand ne PAS l'utiliser~: questions précises et bien formulées.
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\begin{center}
+\begin{tikzpicture}[node distance=4mm and 10mm]
+  \node[data] (q) {"Comment marche l'héritage ?"};
+
+  \node[llm, below=of q] (gen) {LLM\\\scriptsize génère 3 reformulations};
+
+  \node[data, below=of gen, font=\scriptsize] (vars)
+       {"Comment hériter en Python ?"\\
+        "Syntaxe de la classe enfant en Python"\\
+        "Différence entre super() et héritage"};
+
+  \node[block, below left=10mm and 8mm of vars]  (r1) {Retriever};
+  \node[block, below=of vars]                    (r2) {Retriever};
+  \node[block, below right=10mm and 8mm of vars] (r3) {Retriever};
+
+  \node[doc, below=of r1] (d1) {docs};
+  \node[doc, below=of r2] (d2) {docs};
+  \node[doc, below=of r3] (d3) {docs};
+
+  \node[block, below=of d2, minimum width=72mm] (merge) {Union + déduplication};
+  \node[doc, below=of merge] (final) {chunks uniques};
+
+  \draw[flowdata] (q)    -- (gen);
+  \draw[flow]     (gen)  -- (vars);
+  \draw[flow]     (vars) -- (r1);
+  \draw[flow]     (vars) -- (r2);
+  \draw[flow]     (vars) -- (r3);
+  \draw[flow]     (r1)   -- (d1);
+  \draw[flow]     (r2)   -- (d2);
+  \draw[flow]     (r3)   -- (d3);
+  \draw[flow]     (d1)   -- (merge);
+  \draw[flow]     (d2)   -- (merge);
+  \draw[flow]     (d3)   -- (merge);
+  \draw[flow]     (merge)-- (final);
+\end{tikzpicture}
+\end{center}
+
+Pipeline en quatre temps~: reformulation LLM, N recherches parallèles,
+union, déduplication.
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+import logging
+from langchain_classic.retrievers.multi_query import MultiQueryRetriever
+from config import get_model
+from phase2_rag import build_or_load_vectorstore, build_rag_chain
+
+
+def exercise_5() -> None:
+    vectorstore     = build_or_load_vectorstore()
+    base_retriever  = vectorstore.as_retriever(search_kwargs={"k": 3})
+    multi_retriever = MultiQueryRetriever.from_llm(
+        retriever=base_retriever,
+        llm=get_model(),
+    )
+
+    # Question courte et ambiguë : "héritage" peut couvrir plusieurs angles
+    question = "Comment marche l'héritage ?"
+
+    # --- Active le logging pour voir les reformulations ---
+    logging.basicConfig()
+    logging.getLogger("langchain.retrievers.multi_query").setLevel(logging.INFO)
+
+    # --- Retriever simple ---
+    docs_simple = base_retriever.invoke(question)
+    print(f"--- Simple (k=3) ---")
+    for i, d in enumerate(docs_simple, 1):
+        print(f"  [{i}] {d.page_content[:100]}...")
+
+    # --- MultiQuery (les logs montrent les 3 reformulations) ---
+    docs_multi = multi_retriever.invoke(question)
+    print(f"\n--- MultiQuery ({len(docs_multi)} docs après déduplication) ---")
+    for i, d in enumerate(docs_multi, 1):
+        print(f"  [{i}] {d.page_content[:100]}...")
+
+    # --- Comparaison des réponses finales ---
+    print("\n--- RÉPONSE simple ---")
+    print(build_rag_chain(base_retriever).invoke(question)[:400], "...")
+
+    print("\n--- RÉPONSE MultiQuery ---")
+    print(build_rag_chain(multi_retriever).invoke(question)[:400], "...")
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — \emph{Precision} vs \emph{Recall}}
+
+\begin{center}
+\begin{tabular}{p{4cm} p{10cm}}
+\toprule
+\textbf{Métrique} & \textbf{Définition (en RAG)} \\
+\midrule
+\textbf{Precision}
+& Parmi les chunks retournés, combien sont pertinents~? \\[1mm]
+\textbf{Recall}
+& Parmi les chunks pertinents qui existent dans le corpus, combien
+sont retrouvés~? \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Le retriever simple optimise la \emph{precision} (top-k par similarité
+exacte). \texttt{MultiQuery} optimise le \emph{recall}~: en multipliant
+les formulations de la question, on \textbf{couvre plus d'angles} et on
+retrouve des chunks qui étaient invisibles à la formulation originale.
+
+\subsubsection*{Étape 2 — Comment la reformulation marche}
+
+\texttt{MultiQueryRetriever.from\_llm} envoie un prompt au LLM~:
+
+\begin{quote}\itshape
+« Génère 3 reformulations différentes de la question suivante pour
+améliorer une recherche par similarité~: "Comment marche l'héritage~?" »
+\end{quote}
+
+Le LLM produit (par exemple)~:
+\begin{itemize}[leftmargin=*]
+  \item « Comment hériter d'une classe en Python~? »
+  \item « Quelle est la syntaxe d'une classe enfant qui hérite~? »
+  \item « Différence entre héritage et composition en Python »
+\end{itemize}
+
+Chaque variante est ensuite passée au retriever de base. Les résultats
+sont \textbf{fusionnés et dédupliqués} (par identité de chunk).
+
+\subsubsection*{Étape 3 — Le logging interne}
+
+\begin{pythoncode}
+import logging
+logging.basicConfig()
+logging.getLogger("langchain.retrievers.multi_query").setLevel(logging.INFO)
+\end{pythoncode}
+
+Avec ces 3 lignes, les reformulations générées s'affichent dans la
+console à chaque appel. Indispensable pour~:
+\begin{itemize}[leftmargin=*]
+  \item Comprendre ce que le LLM \emph{reformule}.
+  \item Diagnostiquer si les reformulations sont pertinentes ou
+        triviales.
+  \item Ajuster le \texttt{prompt} de reformulation au besoin.
+\end{itemize}
+
+\subsubsection*{Étape 4 — Coût et quand l'utiliser}
+
+\begin{center}
+\begin{tabular}{p{5cm} p{4cm} p{5cm}}
+\toprule
+\textbf{Métrique} & \textbf{Simple} & \textbf{MultiQuery} \\
+\midrule
+Appels LLM pour la query
+& 0 (embedding seul)
+& 1 (reformulation) \\[1mm]
+Appels au retriever
+& 1
+& \texttt{N} (typique~: 3) \\[1mm]
+Coût par requête utilisateur
+& \(\sim\)1\texttt{x}
+& \(\sim\)1.5--2\texttt{x} \\[1mm]
+Gain sur questions précises
+& —
+& \textbf{Nul}, juste du coût \\[1mm]
+Gain sur questions courtes/ambiguës
+& —
+& \textbf{Significatif} (+30--50\% de recall) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{quote}\itshape
+\textbf{Règle pratique}~: utilise MultiQuery quand tu observes que des
+réponses sont incomplètes \emph{parce que des chunks pertinents n'ont
+pas été ramenés}. N'utilise pas MultiQuery si le problème est ailleurs
+(chunk\_size, prompt, modèle).
+\end{quote}
+
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+[OK] Rechargement de l'index depuis ./chroma_db
+
+Question (volontairement vague) : Comment marche l'héritage ?
+
+--- Retriever SIMPLE (k=3) ---
+  [1] 'UnicodeError', 'UnicodeTranslateError', 'UnicodeWarning',
+      'UserWarning', 'ValueError', 'Warning', '...
+  [2] |     raise ExceptionGroup('there were problems', excs) |
+      ExceptionGroup: there were problems (2 sub...
+  [3] definition.  (A class is never used as a global scope.)  While
+      one rarely encounters a good reason f...
+
+--- MultiQuery Retriever ---
+
+  11 documents au total (déduplication automatique)
+  [1] 4.9. More on Defining Functions 4.9.1. Default Argument Values
+      4.9.2. Keyword Arguments 4.9.3. Speci...
+  [2] Previous topic Enum HOWTO Next topic Logging HOWTO This page
+      Report a bug Improve this page Show sou...
+  [3] mixed numeric types are compared according to their numeric
+      value, so 0 equals 0.0, etc.  Otherwise,...
+  [4] . text encoding   A string in Python is a sequence of Unicode
+      code points (in range U+0000 - U+10FFF...
+  [5] Encoding and error handler used by Python to decode bytes from
+      the operating system and encode Unico...
+  [6] simply replace the base class method of the same name. There is
+      a simple way to call the base class ...
+  [7] There's nothing special about instantiation of derived classes:
+      DerivedClassName() creates a new ins...
+  [8] |     raise ExceptionGroup('there were problems', excs) |
+      ExceptionGroup: there were problems (2 sub...
+  [9] cycles so that the memory can be reclaimed. data race   A
+      situation where multiple threads access th...
+  [10] yield and a return statement is that on reaching a yield the
+       generator's state of execution is suspe...
+  [11] __iter__() method which returns an object with a __next__()
+       method.  If the class defines __next__()...
+
+--- REPONSE avec retriever simple ---
+# L'héritage en Python
+
+D'après le contexte fourni [3], voici comment fonctionne l'héritage :
+
+## Syntaxe de base
+
+Pour créer une classe qui hérite d'une autre, on utilise la syntaxe
+suivante :
+
+```python
+class DerivedClassName(BaseClassName):
+    <statement-1>
+    ...
+    <statement-N>
+```
+
+**Explication :**
+- `DerivedClassName` est la classe dérivée (la classe enfant)
+- `BaseClassName` est la cl...
+
+--- REPONSE avec MultiQuery ---
+# L'héritage en Python
+
+D'après la documentation fournie [6][7], voici comment fonctionne
+l'héritage :
+
+## Syntaxe de base
+
+Une classe dérivée hérite d'une ou plusieurs classes de base :
+
+```python
+class ClasseDerivee(ClasseBase):
+    <instruction-1>
+    ...
+    <instruction-N>
+```
+
+## Fonctionnement principal
+
+**Résolution des méthodes** [7] : Quand vous appelez une méthode,
+Python cherche l'attr...
+
+----------------------------------------------------------------------
+OBSERVATIONS A RETENIR :
+ - Regarde les logs ci-dessus pour voir les 3 reformulations
+   générées automatiquement par le LLM.
+ - MultiQuery double ou triple ton coût par question (1 appel pour
+   reformuler + N appels de recherche), mais améliore notablement
+   le recall sur les questions courtes ou floues.
+ - A ne PAS utiliser sur des questions très précises et bien
+   formulées : aucun gain, juste du coût en plus.
+\end{verbatim}
+\end{tcolorbox}
+
+\subsection{Vérification dans LangSmith}
+
+Avec MultiQuery, LangSmith trace un arbre plus profond~:
+
+\begin{center}
+\begin{tikzpicture}[every node/.style={font=\footnotesize\ttfamily, anchor=west}]
+  \node                              (a) {MultiQueryRetriever};
+  \node[below=1mm of a, xshift=4mm]  (b) {LLMChain (génération des 3 reformulations) ← LLM \#1};
+  \node[below=1mm of b]              (c) {VectorStoreRetriever (variante 1)};
+  \node[below=1mm of c]              (d) {VectorStoreRetriever (variante 2)};
+  \node[below=1mm of d]              (e) {VectorStoreRetriever (variante 3)};
+  \node[below=1mm of e, xshift=-4mm] (f) {(fusion + déduplication, hors trace)};
+\end{tikzpicture}
+\end{center}
+
+\begin{quote}\itshape
+Tu vois directement les 3 variantes générées (onglet \emph{Output} de
+la \texttt{LLMChain}), et le contenu des 3 retrievals. Précieux pour
+auditer la qualité des reformulations.
+\end{quote}
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item \texttt{MultiQueryRetriever} reformule la question en N variantes
+        \textbf{via un LLM}, puis fusionne les N résultats du retriever
+        de base.
+  \item Objectif~: améliorer le \emph{recall} sur les questions courtes,
+        ambiguës ou mal formulées.
+  \item Coût~: +1 appel LLM pour reformuler + N appels au retriever.
+        $\sim$1.5 à 2$\times$ le coût d'une requête simple.
+  \item Active le \texttt{logging} sur \texttt{langchain.retrievers.multi\_query}
+        pour voir les reformulations.
+  \item À ne PAS utiliser sur des questions déjà précises~: aucun gain,
+        juste du coût en plus.
+\end{enumerate}
+\par}
+
+% #####################################################################
+% #####################################################################
+\section{Filtrage par métadonnée}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice bonus 6. Restreindre la recherche à une sous-partie du corpus]
+Chaque chunk du \texttt{Chroma} a hérité d'une \texttt{metadata.source}
+(l'URL d'origine). Construis un retriever filtré qui ne cherche que dans
+\texttt{tutorial/classes.html} pour une question sur la POO. Compare
+avec le retriever non filtré.
+
+Démontre aussi le \textbf{piège}~: si tu poses une question hors du
+périmètre du filtre (ex.~: « Comment lever une exception~? » alors que
+le filtre est sur \texttt{classes.html}), le retriever ramène du contenu
+hors-sujet.
+
+\textbf{Contrainte}~: utiliser \texttt{search\_kwargs=\{"filter": \{\dots\}\}}
+avec la syntaxe MongoDB-like de Chroma.
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Utiliser la \texttt{metadata} des chunks pour restreindre la
+        recherche.
+  \item Connaître la syntaxe de filtre Chroma (\texttt{\$eq},
+        \texttt{\$in}, \texttt{\$and}, \texttt{\$or}, \dots).
+  \item Identifier le piège~: un filtre mal calibré force le retriever
+        à choisir le « moins pire » dans un sous-corpus inadapté.
+  \item Esquisser le \emph{pattern de production}~: un classifieur LLM
+        en amont qui décide \emph{dynamiquement} du filtre à appliquer.
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\begin{center}
+\begin{tikzpicture}[node distance=6mm and 10mm]
+  \node[data] (q) {"Comment fonctionne super() ?"};
+
+  \node[block, below=of q] (ret) {Retriever\\\scriptsize filter=\{source: classes.html\}};
+
+  \node[store, below=of ret] (chroma)
+       {Chroma\\\scriptsize tous les chunks};
+
+  \node[doc, right=of chroma, fill=red!8] (filtered) {chunks de\\classes.html\\\scriptsize uniquement};
+
+  \draw[flowdata] (q)     -- (ret);
+  \draw[flow]     (ret)   -- (chroma);
+  \draw[flow]     (chroma)-- (filtered) node[label, midway, above]{filtre metadata};
+\end{tikzpicture}
+\end{center}
+
+Le filtre s'applique \emph{avant} le calcul de similarité~: seuls les
+chunks dont les metadata matchent sont éligibles à la recherche.
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+from phase2_rag import build_or_load_vectorstore
+
+
+def exercise_6() -> None:
+    vectorstore = build_or_load_vectorstore()
+
+    # --- Retriever filtré : SEULEMENT classes.html ---
+    classes_only = vectorstore.as_retriever(
+        search_kwargs={
+            "k": 4,
+            "filter": {"source": "https://docs.python.org/3/tutorial/classes.html"},
+        },
+    )
+
+    # --- Retriever non filtré pour comparaison ---
+    unfiltered = vectorstore.as_retriever(search_kwargs={"k": 4})
+
+    question = "Comment fonctionne `super()` ?"
+
+    print("--- SANS filtre ---")
+    for i, d in enumerate(unfiltered.invoke(question), 1):
+        src = d.metadata.get("source", "?").split("/")[-1]
+        print(f"  [{i}] ({src}) {d.page_content[:80]}...")
+
+    print("\n--- AVEC filtre source=classes.html ---")
+    for i, d in enumerate(classes_only.invoke(question), 1):
+        src = d.metadata.get("source", "?").split("/")[-1]
+        print(f"  [{i}] ({src}) {d.page_content[:80]}...")
+
+    # Démo de la limite : question hors du périmètre du filtre
+    off_topic = "Comment lever une exception ?"
+    print(f"\n--- AVEC filtre, question hors-périmètre ({off_topic}) ---")
+    for i, d in enumerate(classes_only.invoke(off_topic), 1):
+        src = d.metadata.get("source", "?").split("/")[-1]
+        print(f"  [{i}] ({src}) {d.page_content[:80]}...")
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — La syntaxe Chroma}
+
+\begin{pythoncode}
+search_kwargs={
+    "k": 4,
+    "filter": {"source": "https://docs.python.org/3/tutorial/classes.html"},
+}
+\end{pythoncode}
+
+Forme simple~: \texttt{\{key: value\}} = match exact sur la metadata.
+Sous le capot, Chroma traduit en \texttt{\{key: \{\$eq: value\}\}}.
+
+Pour des filtres plus riches, syntaxe MongoDB-like~:
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Opérateur} & \textbf{Exemple} \\
+\midrule
+\texttt{\$eq}, \texttt{\$ne}
+& \texttt{\{"source": \{"\$eq": "url"\}\}} \\
+\texttt{\$in}, \texttt{\$nin}
+& \texttt{\{"source": \{"\$in": [url1, url2]\}\}} \\
+\texttt{\$gt}, \texttt{\$gte}, \texttt{\$lt}, \texttt{\$lte}
+& sur des champs numériques \\
+\texttt{\$and}, \texttt{\$or}
+& \texttt{\{"\$and": [filtre1, filtre2]\}} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection*{Étape 2 — Quand le filtre brille}
+
+Cas d'usage parfaits~:
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Multi-tenant}~: chaque utilisateur a son propre corpus,
+        filtrer par \texttt{tenant\_id}.
+  \item \textbf{Multi-langue}~: filtrer par \texttt{lang} pour éviter
+        de retrouver du contenu en anglais sur une query française.
+  \item \textbf{Documentation versionnée}~: filtrer par \texttt{version}
+        (« super() en Python 3.0 vs 3.12 »).
+  \item \textbf{Dates}~: récupérer uniquement les chunks plus récents
+        que \texttt{X}.
+\end{itemize}
+
+\subsubsection*{Étape 3 — Quand le filtre casse}
+
+Si le filtre est \textbf{mal calibré} (utilisateur cherche dans le
+mauvais sous-corpus), le retriever ramène du contenu hors-sujet sans
+warning~:
+
+\begin{quote}\itshape
+Sur \emph{« Comment lever une exception~? »} avec filter
+\texttt{classes.html}, Chroma retourne les chunks de \texttt{classes.html}
+les plus proches de la query — qui parlent de classes, pas d'exceptions.
+Le RAG aval va générer une réponse hors-sujet ou hallucinée à partir
+de ce contexte inadapté.
+\end{quote}
+
+C'est le danger du filtre~: il \textbf{force} le retrieval à choisir
+dans un sous-ensemble, même si rien n'y est pertinent.
+
+\subsubsection*{Étape 4 — Pattern de production : auto-routing}
+
+En production, le filtre ne devrait pas être codé en dur. Pattern
+typique~:
+
+\begin{center}
+\begin{tikzpicture}[node distance=5mm and 12mm]
+  \node[data] (q) {question utilisateur};
+  \node[llm, below=of q] (cls) {Classifieur LLM\\\scriptsize choisit la catégorie};
+  \node[data, below=of cls] (cat) {\{"category": "exceptions"\}};
+  \node[block, below=of cat] (filter) {build filter};
+  \node[block, below=of filter] (ret) {Retriever filtré\\\scriptsize ad hoc};
+
+  \draw[flowdata] (q)    -- (cls);
+  \draw[flow]     (cls)  -- (cat);
+  \draw[flow]     (cat)  -- (filter);
+  \draw[flow]     (filter) -- (ret);
+\end{tikzpicture}
+\end{center}
+
+Le mini-classifieur LLM (avec \texttt{with\_structured\_output} +
+\texttt{Literal[\dots]} comme dans la Phase 1 / Exercice 4 bonus) décide
+\emph{dynamiquement} du filtre à appliquer. C'est l'analogue du
+\texttt{RunnableBranch} mais appliqué au retrieval.
+
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 6 -- Filtrage par métadonnée (source URL)
+======================================================================
+[OK] Rechargement de l'index depuis ./chroma_db
+
+Question : Comment fonctionne `super()` ?
+
+--- SANS filtre (toutes les pages indexées) ---
+  [1] (modules.html) 'UnicodeError', 'UnicodeTranslateError',
+      'UnicodeWarning', 'UserWarning', 'Value...
+  [2] (modules.html) 'EOFError', 'Ellipsis', 'EnvironmentError',
+      'Exception', 'False', 'FileExistsErr...
+  [3] (modules.html) Function   The built-in function dir() is used
+      to find out which names a module ...
+  [4] (glossary.html) . single dispatch   A form of generic function
+      dispatch where the implementation...
+
+--- AVEC filtre source=classes.html ---
+  [1] (classes.html) definition.  (A class is never used as a global
+      scope.)  While one rarely encoun...
+  [2] (classes.html) call-next-method and is more powerful than the
+      super call found in single-inheri...
+  [3] (classes.html) __iter__() method which returns an object with
+      a __next__() method.  If the clas...
+  [4] (classes.html) # Function defined outside the class def f1 (
+      self , x , y ): return min ( x , x...
+
+
+Démo limite -- question hors-périmètre : Comment lever une exception ?
+
+--- AVEC filtre source=classes.html (mauvaise idée ici) ---
+  [1] (classes.html) 285 >>> xvec = [ 10 , 20 , 30 ] >>> yvec = [ 7 ,
+      5 , 3 ] >>> sum ( x * y for x ,...
+  [2] (classes.html) 9. Classes 9.1. A Word About Names and Objects
+      9.2. Python Scopes and Namespaces...
+  [3] (classes.html) Examples, recipes, and other code in the
+      documentation are additionally licensed...
+  [4] (classes.html) __iter__() method which returns an object with
+      a __next__() method.  If the clas...
+
+----------------------------------------------------------------------
+OBSERVATIONS A RETENIR :
+ - Le filtre par metadata est un couteau : utile quand tu SAIS
+   où chercher (ex: namespace, tag, langue, date), pénalisant
+   quand tu te trompes de domaine.
+ - Syntaxe Chroma : opérateurs $eq, $ne, $in, $gt, $gte, $lt,
+   $lte, $and, $or. Ex: {'source': {'$in': [url1, url2]}}.
+ - Pattern de prod : un mini-classifieur LLM en amont qui décide
+   du filtre à appliquer (auto-routing par metadata).
+\end{verbatim}
+\end{tcolorbox}
+
+\subsection{Vérification dans LangSmith}
+
+Le run du retriever filtré expose le \texttt{filter} dans son input~:
+
+\begin{center}
+\begin{tikzpicture}[every node/.style={font=\footnotesize\ttfamily, anchor=west}]
+  \node                              (a) {VectorStoreRetriever (filtered)};
+  \node[below=1mm of a, xshift=4mm]  (b) {Input  : "Comment fonctionne super() ?"};
+  \node[below=1mm of b]              (c) {Config : k=4, filter=\{source: ".../classes.html"\}};
+  \node[below=1mm of c]              (d) {Output : [Doc, Doc, Doc, Doc]};
+  \node[below=1mm of d, xshift=4mm]  (e) {tous source: classes.html};
+\end{tikzpicture}
+\end{center}
+
+\begin{quote}\itshape
+Vérifie toujours dans LangSmith que la \texttt{metadata.source} des
+chunks retournés est bien dans le périmètre attendu. Si tu vois des
+sources hors du filtre, c'est qu'il y a un bug dans la spécification
+(souvent une typo dans l'URL).
+\end{quote}
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item \texttt{search\_kwargs=\{"filter": \{\dots\}\}} restreint le
+        retrieval aux chunks dont la \texttt{metadata} matche.
+  \item Syntaxe Chroma MongoDB-like~: \texttt{\$eq}, \texttt{\$in},
+        \texttt{\$and}, etc. Match exact si on omet l'opérateur.
+  \item Bons cas d'usage~: multi-tenant, multi-langue, versionnage,
+        dates.
+  \item Piège~: si la question sort du périmètre du filtre, le retriever
+        ramène du contenu hors-sujet sans warning. Toujours vérifier.
+  \item Pattern de production~: classifieur LLM en amont qui décide
+        \emph{dynamiquement} du filtre à appliquer (auto-routing par
+        metadata).
+\end{enumerate}
+\par}
+
+
+
+\appendix
+
+\section{Programme principal exécutable}
+
+La fonction \texttt{demo()} ci-dessous orchestre les trois démos
+présentées tout au long du chapitre~: indexation (ou rechargement),
+RAG simple, RAG avec sources, puis comparaison \texttt{similarity} vs
+\texttt{mmr}. C'est le point d'entrée exécuté par
+\texttt{python phase2\_rag.py}.
+
+\begin{pythoncode}
+def demo() -> None:
+    # --- Indexation (ou rechargement) ---
+    vectorstore = build_or_load_vectorstore()
+
+    # --- Démo 1 : RAG simple, sortie texte ---
+    print("=" * 70)
+    print("DÉMO 1 — RAG simple (retriever similarity, k=4)")
+    print("=" * 70)
+    retriever = vectorstore.as_retriever(
+        search_type="similarity",
+        search_kwargs={"k": 4},
+    )
+    chain = build_rag_chain(retriever)
+
+    question = DEMO_QUESTIONS[1]
+    print(f"\nQuestion : {question}\n")
+    answer = chain.invoke(question)
+    print(answer)
+
+    # --- Démo 2 : RAG avec sources ---
+    print("\n" + "=" * 70)
+    print("DÉMO 2 — RAG avec inspection des sources")
+    print("=" * 70)
+    chain_with_sources = build_rag_chain_with_sources(retriever)
+    question = DEMO_QUESTIONS[2]
+    print(f"\nQuestion : {question}\n")
+    result = chain_with_sources.invoke(question)
+    print("RÉPONSE :")
+    print(result["answer"])
+    print("\nSOURCES UTILISÉES :")
+    for i, doc in enumerate(result["context"], 1):
+        snippet = doc.page_content[:120].replace("\n", " ")
+        print(f"  [{i}] {doc.metadata.get('source', '?')}")
+        print(f"      {snippet}...")
+
+    # --- Démo 3 : comparaison similarity vs MMR ---
+    print("\n" + "=" * 70)
+    print("DÉMO 3 — Similarity vs MMR sur la MÊME question")
+    print("=" * 70)
+    question = DEMO_QUESTIONS[0]
+    print(f"\nQuestion : {question}")
+
+    sim_retriever = vectorstore.as_retriever(
+        search_type="similarity",
+        search_kwargs={"k": 3},
+    )
+    mmr_retriever = vectorstore.as_retriever(
+        search_type="mmr",
+        # fetch_k : on récupère 20 candidats avant de sélectionner
+        # les 3 plus diversifiés.
+        # lambda_mult : 1.0 = pure similarité, 0.0 = pure diversité.
+        search_kwargs={"k": 3, "fetch_k": 20, "lambda_mult": 0.5},
+    )
+
+    print("\n--- Top-3 similarity ---")
+    for i, doc in enumerate(sim_retriever.invoke(question), 1):
+        print(f"  [{i}] {doc.page_content[:100].replace(chr(10), ' ')}...")
+
+    print("\n--- Top-3 MMR (diversifié) ---")
+    for i, doc in enumerate(mmr_retriever.invoke(question), 1):
+        print(f"  [{i}] {doc.page_content[:100].replace(chr(10), ' ')}...")
+
+    print("\n" + "=" * 70)
+    print("Observe : MMR évite les doublons sémantiques que retourne la")
+    print("similarity pure. Pour une question généraliste comme 'liste vs")
+    print("tuple', MMR ramène souvent des chunks plus complémentaires.")
+    print("=" * 70)
+
+if __name__ == "__main__":
+    demo()
+\end{pythoncode}
 
 \end{document}

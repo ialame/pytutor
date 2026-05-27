@@ -262,6 +262,32 @@ parallèle. La parallélisation ne change rien à la facture, seulement à
 la latence perçue.
 \end{quote}
 
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 1 — Parallèle vs séquentiel sur 3 niveaux
+======================================================================
+\end{verbatim}
+
+Séquentiel~: 22.86\,s pour 3 niveaux\\
+Parallèle ~: 8.98\,s pour 3 niveaux\\
+$\rightarrow$ Speedup~: $\times 2.55$
+
+\textbf{Extrait niveau avancé :}
+
+Un décorateur est une fonction qui prend une autre fonction en entrée, la
+modifie ou l'enveloppe avec du code supplémentaire, puis retourne la
+version modifiée. C'est comme un emballage cadeau qui ajo\dots
+\end{tcolorbox}
+
 \subsection{Vérification dans LangSmith}
 
 L'arbre d'exécution affiche un seul \texttt{RunnableParallel} parent avec
@@ -455,6 +481,32 @@ Pour 4 inputs à $\sim$2 s chacun~:
   \item \textbf{Speedup}    : $\times 3$ à $\times 4$
 \end{itemize}
 
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 2 — batch() vs boucle for
+======================================================================
+\end{verbatim}
+
+Boucle for~: 32.30\,s pour 4 concepts\\
+batch()   ~: 8.30\,s pour 4 concepts\\
+$\rightarrow$ Speedup~: $\times 3.89$
+
+\textbf{Exemple (les décorateurs) :}
+
+Un décorateur est une fonction qui <<~enveloppe~>> une autre fonction pour
+modifier son comportement sans changer son code original. C'est comme
+ajouter une couche de papier cadeau autour d'un cadeau~: le\dots
+\end{tcolorbox}
+
 \subsection{Vérification dans LangSmith}
 
 Le run racine s'appelle \texttt{RunnableSequence.batch} et contient N
@@ -638,6 +690,40 @@ tout}.
 au prompt (le schéma est envoyé à chaque appel). Le coût marginal d'un
 champ supplémentaire est de $\sim$30 à 80 tokens — négligeable.
 \end{quote}
+
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 3 — Schéma Pydantic enrichi avec un champ analogy
+======================================================================
+\end{verbatim}
+
+\textbf{--- les décorateurs ---}\\
+Analogie~: C'est comme emballer un cadeau~: tu prends ta fonction (le
+cadeau), tu la mets dans du papier cadeau (le décorateur), et maintenant
+le cadeau a une belle présentation en plus, sans que le contenu ne
+change.
+
+\textbf{--- le polymorphisme ---}\\
+Analogie~: C'est comme une télécommande universelle~: le bouton
+<<~play~>> fait jouer la musique sur un haut-parleur, mais lance la
+vidéo sur un téléviseur. Même bouton, résultats différents selon
+l'appareil.
+
+\textbf{--- le contexte avec \texttt{with} ---}\\
+Analogie~: C'est comme emprunter un livre à la bibliothèque~:
+\texttt{with} c'est le système qui te force à le rendre à la date
+limite, même si tu l'oublies. Sans \texttt{with}, tu dois te souvenir
+tout seul de le rendre.
+\end{tcolorbox}
 
 \subsection{Vérification dans LangSmith}
 
@@ -883,6 +969,46 @@ classifieur et ajoute le résultat sous la clé \texttt{category}, sans
 toucher aux clés existantes. C'est l'équivalent d'un
 \texttt{SELECT *, expr AS col} en SQL.
 \end{quote}
+
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 4 — Router avec RunnableBranch
+======================================================================
+\end{verbatim}
+
+\textbf{[~~~syntaxe]} les list comprehensions\\
+$\rightarrow$ \#~List Comprehensions en Python \quad \#\#~Concept \quad Une
+\textbf{list comprehension} est une syntaxe compacte pour créer une liste
+en appliquant une expression à chaque élément d'une séquence, avec
+possibilité de f\dots
+
+\textbf{[~paradigme]} le polymorphisme\\
+$\rightarrow$ \#~Le Polymorphisme~: Une Philosophie de Flexibilité \quad
+\#\#~L'Essence Philosophique \quad Le polymorphisme incarne une idée
+fondamentale~: \textbf{<<~une même interface, plusieurs formes~>>}. C'est
+la capacité d'une en\dots
+
+\textbf{[ecosysteme]} pytest\\
+$\rightarrow$ \#~pytest -- Framework de Test Python \quad \#\#~Concept Clé
+\quad \textbf{pytest} est un framework de test moderne et puissant pour
+Python. Il simplifie l'écriture et l'exécution de tests avec une syntaxe
+minimaliste\dots
+
+\textbf{[~~~syntaxe]} lambda\\
+$\rightarrow$ \#~Lambda en Python \quad \#\#~Concept \quad Une
+\textbf{lambda} est une fonction anonyme (sans nom) définie en une seule
+ligne. Elle permet de créer rapidement des petites fonctions sans
+utiliser \texttt{def}. \quad \#\#~Syntaxe exa\dots
+\end{tcolorbox}
 
 \subsection{Vérification dans LangSmith}
 
@@ -1145,6 +1271,38 @@ async def exercise_5() -> None:
 if __name__ == "__main__":
     asyncio.run(exercise_5())
 \end{pythoncode}
+
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 5 — Async avec asyncio.gather vs RunnableParallel
+======================================================================
+\end{verbatim}
+
+asyncio.gather   ~: 8.74\,s\\
+RunnableParallel ~: 9.61\,s\\
+Sync (RunnablePar)~: 8.42\,s
+
+\textbf{Échantillon (les générateurs Python, débutant) :}
+
+Un générateur est une fonction spéciale qui produit des valeurs une à la
+fois, au lieu de tout calculer d'un coup. Imagine une usine qui fabrique
+des bonbons~: au lieu de fabriquer 1000 bonbons et les\dots
+
+\begin{verbatim}
+======================================================================
+[OK] Tous les exercices de la Phase 1 sont résolus.
+======================================================================
+\end{verbatim}
+\end{tcolorbox}
 
 \subsection{Vérification dans LangSmith}
 

@@ -97,6 +97,10 @@
     rectangle, rounded corners=1pt, draw=teal!60!black, fill=teal!10,
     minimum height=6mm, font=\scriptsize\ttfamily, inner sep=2pt
   },
+  predicate/.style={
+    diamond, draw=orange!70!black, fill=orange!15, aspect=2.4,
+    inner sep=1pt, font=\footnotesize, align=center
+  },
   flow/.style={-{Stealth[length=2.2mm]}, thick, draw=blue!60!black},
   flowdata/.style={-{Stealth[length=2.2mm]}, thick, draw=gray!60, dashed},
   label/.style={font=\scriptsize\itshape, fill=white, inner sep=1pt},
@@ -106,7 +110,7 @@
 
 % ---------- Titre ----------
 \title{\textbf{Phase 1 — LangChain LCEL}\\
-\large Le moteur d'explication structurée : cinq concepts essentiels}
+\large Cinq concepts essentiels + cinq exercices pour aller plus loin}
 \author{Cours PyTutor2}
 \date{}
 
@@ -122,11 +126,17 @@ et \texttt{.partial()}, l'exécution parallèle avec
 \texttt{RunnableParallel}, et le streaming token par token avec
 \texttt{.stream()}. Chaque concept est traité avec un énoncé, une
 architecture illustrée en TikZ, le code complet, des explications pas à pas
-et la vérification dans LangSmith.
+et la vérification dans LangSmith. Une seconde partie
+\emph{« Pour aller plus loin »} prolonge avec cinq exercices avancés~:
+parallélisation à 3 branches, \texttt{.batch()} sur plusieurs inputs,
+extension d'un schéma Pydantic, router avec \texttt{RunnableBranch}, et
+exécution \texttt{async}.
 \end{abstract}
 
 \tableofcontents
 \bigskip
+
+\part{Exercices}
 
 % #####################################################################
 % #####################################################################
@@ -303,6 +313,90 @@ Deux façons d'appeler le template~:
 Avant de te demander pourquoi le modèle répond bizarrement, imprime ce que
 \textbf{tu lui as réellement envoyé} — souvent l'erreur est là.
 \end{quote}
+
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+DÉMO 1 — Explication structurée : 'les générateurs Python' (intermédiaire)
+======================================================================
+\end{verbatim}
+
+\textbf{Intuition :}
+
+Un générateur est une fonction qui produit une séquence de valeurs une à la
+fois, au lieu de tout calculer et retourner d'un coup. Imagine une usine qui
+fabrique des objets à la demande plutôt que de les stocker tous en entrepôt~:
+elle économise de l'espace et de l'énergie. En Python, les générateurs
+utilisent le mot-clé \texttt{yield} pour <<~pausable~>> et reprendre
+l'exécution, ce qui les rend très efficaces pour traiter de grandes quantités
+de données.
+
+\textbf{Code :}
+
+\begin{minted}[fontsize=\scriptsize, linenos=false, frame=none, bgcolor=white, breaklines=true]{python}
+# Fonction classique : calcule et retourne TOUT d'un coup
+def nombres_classique(n: int) -> list:
+    resultat = []
+    for i in range(n):
+        resultat.append(i ** 2)
+    return resultat
+
+# Générateur : produit les valeurs UNE À LA FOIS
+def nombres_generateur(n: int):
+    for i in range(n):
+        yield i ** 2  # Pause ici, attend qu'on demande la prochaine valeur
+
+# Utilisation
+print("Classique :", nombres_classique(5))  # [0, 1, 4, 9, 16]
+
+print("Générateur :")
+gen = nombres_generateur(5)
+print(next(gen))  # 0 (première valeur)
+print(next(gen))  # 1 (deuxième valeur)
+
+# Ou avec une boucle (plus courant)
+for valeur in nombres_generateur(5):
+    print(valeur)  # Affiche 0, 1, 4, 9, 16 une à une
+\end{minted}
+
+\textbf{Piège classique :}
+
+Oublier que les générateurs ne peuvent être parcourus qu'une seule fois. Une
+fois épuisés, ils ne produisent plus de valeurs. Si tu essaies de les
+réutiliser, tu dois en créer une nouvelle instance. Aussi, confondre
+\texttt{yield} avec \texttt{return}~: \texttt{yield} pause et reprend, tandis
+que \texttt{return} termine définitivement la fonction.
+
+\textbf{Questions de compréhension :}
+
+\begin{enumerate}[leftmargin=*, font=\footnotesize\bfseries]
+  \item Quelle est la différence principale entre une fonction classique qui
+        retourne une liste et un générateur~?\\
+        $\rightarrow$ Une fonction classique calcule et retourne toutes les
+        valeurs à la fois en mémoire, tandis qu'un générateur produit les
+        valeurs une à la fois à la demande, ce qui économise la mémoire.
+  \item Comment appelle-t-on le mot-clé qui permet à une fonction de devenir
+        un générateur~?\\
+        $\rightarrow$ Le mot-clé \texttt{yield}. Quand une fonction contient
+        \texttt{yield}, elle devient un générateur au lieu d'une fonction
+        classique.
+  \item Pourquoi les générateurs sont-ils particulièrement utiles pour
+        traiter des fichiers très volumineux ou des flux de données
+        infinis~?\\
+        $\rightarrow$ Parce qu'ils ne chargent pas toutes les données en
+        mémoire à la fois, mais les traitent progressivement. Cela permet de
+        traiter des données plus grandes que la RAM disponible et de réagir
+        immédiatement aux premières valeurs sans attendre le calcul complet.
+\end{enumerate}
+\end{tcolorbox}
 
 \subsection{Vérification dans LangSmith}
 
@@ -622,6 +716,39 @@ l'auto-complétion sur les champs. C'est le \emph{cadeau} de la sortie
 structurée — sois sûr de l'utiliser.
 \end{quote}
 
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+DÉMO 2 — RunnableParallel : 2 niveaux en concurrence
+======================================================================
+\end{verbatim}
+
+\textbf{--- Pour un DÉBUTANT ---}
+
+Un générateur est une fonction spéciale qui produit des valeurs une à la
+fois, au lieu de tout créer d'un coup. Imagine une usine qui fabrique des
+bonbons~: au lieu de fabriquer 1000 bonbons et les stocker tous ensemble,
+elle en fabrique un seul quand tu en demandes un. C'est plus économe en
+mémoire et plus rapide au démarrage.
+
+\textbf{--- Pour un INTERMÉDIAIRE ---}
+
+Un générateur est une fonction qui produit une séquence de valeurs une à la
+fois, au lieu de tout calculer et retourner d'un coup. Imagine une usine qui
+fabrique des objets à la demande plutôt que de les stocker tous en
+entrepôt~: c'est plus efficace en mémoire. Quand tu appelles un générateur,
+il te donne la prochaine valeur chaque fois que tu la demandes, en se
+<<~souvenant~>> où il en était.
+\end{tcolorbox}
+
 \subsection{Vérification dans LangSmith}
 
 \subsubsection*{L'arbre d'exécution attendu}
@@ -934,6 +1061,37 @@ prompt par \textbf{une fabrique paramétrée}. C'est l'esprit LCEL~:
 construire dynamiquement des graphes d'exécution à partir de briques
 primitives, plutôt que d'écrire du code impératif.
 \end{quote}
+
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+DÉMO 3 — Streaming token par token
+======================================================================
+\end{verbatim}
+
+\textbf{\# Le GIL (Global Interpreter Lock) en Python}
+
+Le GIL est un mécanisme de verrouillage global dans l'interpréteur CPython
+qui empêche l'exécution simultanée de bytecode Python par plusieurs threads.
+Même sur un processeur multi-cœurs, un seul thread peut exécuter du code
+Python à la fois. Cela existe pour simplifier la gestion mémoire de CPython
+et éviter les conditions de course lors de l'accès aux objets Python.
+
+\textbf{Conséquences pratiques}~: Le GIL limite les performances des
+programmes multi-threadés pour les tâches CPU-intensives. Pour contourner ce
+problème, on peut utiliser le multiprocessing (processus séparés), les
+asyncio (programmation asynchrone), ou des bibliothèques comme NumPy qui
+libèrent le GIL. Le GIL n'affecte pas les opérations I/O (réseau, fichiers)
+car le verrou est libéré pendant ces opérations.
+\end{tcolorbox}
 
 \subsection{Vérification dans LangSmith}
 
@@ -1620,5 +1778,1244 @@ court. C'est, mesurée, la valeur ajoutée du streaming.
         libre pour les autres connexions.
 \end{enumerate}
 \par}
+
+\part{Pour aller plus loin}
+
+% #####################################################################
+% #####################################################################
+\section{Multi-niveaux 3$\times$ : parallèle vs séquentiel}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice bonus 1. Mesurer le speedup d'un \texttt{RunnableParallel} à 3 branches]
+Ajoute un niveau \texttt{"avancé"} à la chaîne multi-niveaux et lance les
+\textbf{3 niveaux en parallèle}. Mesure le temps d'exécution
+\textbf{séquentiel} (3 \texttt{.invoke()} successifs) et le temps
+\textbf{parallèle} (un seul \texttt{.invoke()} sur un \texttt{RunnableParallel}
+à 3 clés). Compare et calcule le \emph{speedup}.
+
+\textbf{Contrainte}~: utiliser \texttt{time.perf\_counter()} pour les
+mesures (plus précis que \texttt{time.time()}). Afficher le rapport
+\texttt{seq\_time / par\_time}.
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Vérifier expérimentalement que \texttt{RunnableParallel} donne une
+        latence en $\max(T_i)$ et non $\sum T_i$.
+  \item Observer la dégradation du speedup quand le nombre de branches
+        augmente (rate limiting côté fournisseur).
+  \item Savoir mesurer proprement la latence avec
+        \texttt{time.perf\_counter()}.
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\begin{center}
+\begin{tikzpicture}[node distance=3mm and 6mm]
+  % Axe séquentiel
+  \draw[timearrow] (0,0) -- (10,0) node[right]{\small temps};
+  \node[left] at (-0.2, 0.6) {\scriptsize séquentiel};
+  \node[bar, anchor=west, minimum width=18mm] (s1) at (0, 0.6) {beginner};
+  \node[bar, anchor=west, minimum width=20mm, fill=orange!30] (s2) at (1.8, 0.6) {intermediate};
+  \node[bar, anchor=west, minimum width=22mm, fill=teal!30] (s3) at (3.8, 0.6) {advanced};
+
+  \draw[decorate, decoration={brace, amplitude=2mm}]
+       (0, 1.2) -- (6.0, 1.2) node[midway, above, yshift=2mm]{\scriptsize $\sim$6 s};
+
+  % Axe parallèle
+  \draw[timearrow] (0,-2.5) -- (10,-2.5);
+  \node[left] at (-0.2, -1.4) {\scriptsize parallèle};
+  \node[bar, anchor=west, minimum width=18mm] (p1) at (0, -1.4) {beginner};
+  \node[bar, anchor=west, minimum width=20mm, fill=orange!30] (p2) at (0, -1.95) {intermediate};
+  \node[bar, anchor=west, minimum width=22mm, fill=teal!30] (p3) at (0, -2.5) {advanced};
+
+  \draw[decorate, decoration={brace, amplitude=2mm}]
+       (0, -1.0) -- (2.2, -1.0) node[midway, above, yshift=2mm]{\scriptsize $\sim$2 s};
+\end{tikzpicture}
+\end{center}
+
+Trois branches en parallèle restent à la latence d'\emph{une} seule chaîne.
+Le speedup attendu est de $\times 3$ en théorie, $\times 2.5$ à $\times 2.8$
+en pratique (overhead de \emph{threading}, rate limits, variations côté
+fournisseur).
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+import time
+from langchain_core.runnables import RunnableParallel
+from phase1_explain import explain_chain_for_level
+
+
+def exercise_1() -> None:
+    concept = "les décorateurs Python"
+
+    # --- Construction des 3 chaînes spécialisées ---
+    beginner     = explain_chain_for_level("débutant")
+    intermediate = explain_chain_for_level("intermédiaire")
+    advanced     = explain_chain_for_level("avancé")
+
+    # --- Version SÉQUENTIELLE : 3 invokes successifs ---
+    t0 = time.perf_counter()
+    seq_results = {
+        "beginner":     beginner.invoke({"concept": concept}),
+        "intermediate": intermediate.invoke({"concept": concept}),
+        "advanced":     advanced.invoke({"concept": concept}),
+    }
+    seq_time = time.perf_counter() - t0
+    print(f"Séquentiel : {seq_time:.2f}s pour 3 niveaux")
+
+    # --- Version PARALLÈLE : un seul invoke sur un RunnableParallel ---
+    parallel = RunnableParallel(
+        beginner=beginner,
+        intermediate=intermediate,
+        advanced=advanced,
+    )
+    t0 = time.perf_counter()
+    par_results = parallel.invoke({"concept": concept})
+    par_time = time.perf_counter() - t0
+    print(f"Parallèle  : {par_time:.2f}s pour 3 niveaux")
+    print(f"→ Speedup  : ×{seq_time / par_time:.2f}")
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — Construire les trois chaînes spécialisées}
+
+\texttt{explain\_chain\_for\_level} est la fabrique qu'on a vue dans le
+concept 3 de la Phase 1. Trois appels suffisent à produire trois
+\texttt{Runnable}, chacun avec son niveau figé via \texttt{.partial()}.
+Pas de duplication de prompt — c'est tout l'intérêt du pattern fabrique.
+
+\subsubsection*{Étape 2 — La mesure séquentielle}
+
+Trois \texttt{.invoke()} successifs s'exécutent en \textbf{série}~: le
+thread Python attend la réponse du serveur entre chaque appel. Avec un
+modèle moyen, chaque \texttt{.invoke()} prend $\sim$2 s ; total $\sim$6 s.
+
+\subsubsection*{Étape 3 — La mesure parallèle}
+
+\texttt{RunnableParallel(beginner=\dots, intermediate=\dots, advanced=\dots)}
+crée un seul \texttt{Runnable} qui, à l'invocation, duplique l'input vers
+les 3 branches et les exécute en \textbf{concurrence} (via un pool de
+threads). On attend que les trois terminent et on récupère un dict
+\texttt{\{"beginner": \dots, "intermediate": \dots, "advanced": \dots\}}.
+
+\subsubsection*{Étape 4 — Le speedup observé}
+
+En pratique, on observe~:
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Séquentiel} : $\sim$5 à 7 s
+  \item \textbf{Parallèle}  : $\sim$2 à 3 s
+  \item \textbf{Speedup}    : $\times 2.0$ à $\times 2.8$
+\end{itemize}
+
+Le facteur 3 théorique n'est jamais atteint à cause de l'overhead de
+threading, des variations de latence côté serveur, et — surtout — des
+\emph{rate limits} du fournisseur quand les 3 appels arrivent en même
+temps.
+
+\begin{quote}\itshape
+\textbf{Coût en tokens} : strictement identique entre séquentiel et
+parallèle. La parallélisation ne change rien à la facture, seulement à
+la latence perçue.
+\end{quote}
+
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 1 — Parallèle vs séquentiel sur 3 niveaux
+======================================================================
+\end{verbatim}
+
+Séquentiel~: 22.86\,s pour 3 niveaux\\
+Parallèle ~: 8.98\,s pour 3 niveaux\\
+$\rightarrow$ Speedup~: $\times 2.55$
+
+\textbf{Extrait niveau avancé :}
+
+Un décorateur est une fonction qui prend une autre fonction en entrée, la
+modifie ou l'enveloppe avec du code supplémentaire, puis retourne la
+version modifiée. C'est comme un emballage cadeau qui ajo\dots
+\end{tcolorbox}
+
+\subsection{Vérification dans LangSmith}
+
+L'arbre d'exécution affiche un seul \texttt{RunnableParallel} parent avec
+\textbf{3 frères} qui se chevauchent temporellement dans la timeline en
+haut du run~:
+
+\begin{center}
+\begin{tikzpicture}[every node/.style={font=\footnotesize\ttfamily, anchor=west}]
+  \node                              (a) {RunnableParallel<beginner, intermediate, advanced>};
+  \node[below=1mm of a, xshift=4mm]  (b) {[beginner] RunnableSequence ← LLM \#1};
+  \node[below=1mm of b]              (c) {[intermediate] RunnableSequence ← LLM \#2};
+  \node[below=1mm of c]              (d) {[advanced] RunnableSequence ← LLM \#3};
+\end{tikzpicture}
+\end{center}
+
+Dans la \emph{timeline}, les 3 barres démarrent au même instant
+(duplication de l'input) et finissent à $\max(T_i)$. Si l'une d'elles
+prend visiblement plus de temps (variations de tokens, retry interne),
+le total dépend d'elle.
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item \texttt{RunnableParallel(a=\dots, b=\dots, c=\dots)} parallélise
+        N chaînes sur le même input. La latence reste à $\max(T_i)$.
+  \item \texttt{time.perf\_counter()} est l'outil standard pour mesurer
+        une durée en Python (monotone, haute résolution).
+  \item Le speedup réel plafonne à $\sim$80\% du facteur théorique à cause
+        des rate limits du fournisseur et de l'overhead de threading.
+  \item Le coût en tokens reste identique — paralléliser n'est qu'un gain
+        de latence, jamais de débit ni d'argent.
+\end{enumerate}
+\par}
+
+% #####################################################################
+% #####################################################################
+\section{\texttt{.batch()} vs boucle \texttt{for}}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice bonus 2. Paralléliser plusieurs \emph{inputs} sur la même chaîne]
+Utilise \texttt{.batch()} au lieu de \texttt{.invoke()} pour expliquer
+une \textbf{liste de concepts} en parallèle. Compare avec une boucle
+\texttt{for} qui appelle \texttt{.invoke()} successivement. Calcule le
+speedup observé.
+
+\textbf{Contrainte}~: utiliser une chaîne \texttt{intermédiaire} et une
+liste d'au moins 4 concepts variés (\texttt{["décorateurs", "métaclasses",
+"générateurs", "GIL"]} par exemple).
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Distinguer \texttt{.batch()} (plusieurs inputs, \emph{même} chaîne)
+        de \texttt{RunnableParallel} (même input, plusieurs chaînes).
+  \item Savoir invoquer une chaîne \texttt{.batch(inputs)} avec une liste
+        de dicts.
+  \item Contrôler le degré de parallélisme via
+        \texttt{config=\{"max\_concurrency": N\}} pour respecter les
+        rate limits.
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\begin{center}
+\begin{tikzpicture}
+  \node[data] (inputs) {[\{"concept": "décorateurs"\},\\\ \{"concept": "métaclasses"\},\\\ \{"concept": "générateurs"\},\\\ \{"concept": "GIL"\}]};
+  \node[block, below=of inputs] (chain) {chain.batch(\dots)\\\scriptsize (RunnableSequence)};
+
+  \node[llm, below left=10mm and 0mm of chain]    (l1) {invoke \#1};
+  \node[llm, below=10mm of chain]                 (l2) {invoke \#2};
+  \node[llm, below right=10mm and 0mm of chain]   (l3) {invoke \#3};
+  \node[llm, right=of l3]                         (l4) {invoke \#4};
+
+  \node[data, below=22mm of chain] (out) {[Explanation, Explanation, Explanation, Explanation]};
+
+  \draw[flowdata] (inputs) -- (chain);
+  \draw[flow]     (chain)  -- (l1) node[label, midway, sloped, above]{en parallèle};
+  \draw[flow]     (chain)  -- (l2);
+  \draw[flow]     (chain)  -- (l3);
+  \draw[flow]     (chain)  -- (l4);
+  \draw[flow]     (l1) -- (out);
+  \draw[flow]     (l2) -- (out);
+  \draw[flow]     (l3) -- (out);
+  \draw[flow]     (l4) -- (out);
+\end{tikzpicture}
+\end{center}
+
+\textbf{Une seule chaîne}, N invocations parallèles. Symétrique mais
+distinct de \texttt{RunnableParallel} qui prend N chaînes différentes
+sur le même input.
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+import time
+from phase1_explain import explain_chain_for_level
+
+
+def exercise_2() -> None:
+    concepts = ["les décorateurs", "les métaclasses", "les générateurs", "le GIL"]
+    chain = explain_chain_for_level("intermédiaire")
+
+    # --- Version BOUCLE : un invoke après l'autre ---
+    t0 = time.perf_counter()
+    loop_results = [chain.invoke({"concept": c}) for c in concepts]
+    loop_time = time.perf_counter() - t0
+    print(f"Boucle for : {loop_time:.2f}s pour {len(concepts)} concepts")
+
+    # --- Version BATCH : un seul appel, parallélisé sous le capot ---
+    inputs = [{"concept": c} for c in concepts]
+    t0 = time.perf_counter()
+    batch_results = chain.batch(inputs)
+    batch_time = time.perf_counter() - t0
+    print(f"batch()    : {batch_time:.2f}s pour {len(concepts)} concepts")
+    print(f"→ Speedup  : ×{loop_time / batch_time:.2f}")
+
+    # Contrôler le degré de parallélisme pour éviter de saturer les rate limits :
+    #   chain.batch(inputs, config={"max_concurrency": 5})
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — Le contrat de \texttt{.batch()}}
+
+\texttt{chain.batch(inputs)} accepte une \textbf{liste} de dicts et
+renvoie une liste de résultats \textbf{dans le même ordre} que l'entrée~:
+
+\begin{pythoncode}
+inputs = [
+    {"concept": "décorateurs"},     # → results[0]
+    {"concept": "métaclasses"},     # → results[1]
+    {"concept": "générateurs"},     # → results[2]
+]
+results = chain.batch(inputs)       # même ordre garanti
+\end{pythoncode}
+
+Sous le capot, LCEL lance les N invocations en parallèle (threads ou
+asyncio selon le contexte) et collecte les résultats.
+
+\subsubsection*{Étape 2 — \texttt{.batch()} vs \texttt{RunnableParallel}}
+
+\begin{center}
+\begin{tabular}{p{6.5cm} p{6.5cm}}
+\toprule
+\textbf{\texttt{chain.batch(inputs)}} & \textbf{\texttt{RunnableParallel(a, b, c)}} \\
+\midrule
+\textbf{Une seule chaîne}, plusieurs inputs.
+& \textbf{N chaînes différentes}, un seul input. \\[1mm]
+Entrée : \texttt{list[dict]} (N inputs).
+& Entrée : \texttt{dict} unique (dupliqué). \\[1mm]
+Sortie : \texttt{list[result]} (même ordre).
+& Sortie : \texttt{dict[branch\_name, result]}. \\[1mm]
+Usage : explorer N requêtes \emph{indépendantes}.
+& Usage : N angles d'analyse d'\emph{une} requête. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{quote}\itshape\sloppy
+\textbf{Règle mnémotechnique} :
+\textbf{plusieurs inputs, même chaîne $\to$ \texttt{.batch()}} ;
+\textbf{même input, plusieurs chaînes $\to$ \texttt{RunnableParallel}}.
+\end{quote}
+
+\subsubsection*{Étape 3 — Contrôler le parallélisme avec \texttt{max\_concurrency}}
+
+Par défaut, \texttt{.batch(N inputs)} lance les N appels simultanément.
+Si N est grand (50, 100\dots), le fournisseur va te \emph{rate limiter}.
+Le contrôle se fait via \texttt{config}~:
+
+\begin{pythoncode}
+# Limiter à 5 appels concurrents
+results = chain.batch(inputs, config={"max_concurrency": 5})
+\end{pythoncode}
+
+LCEL exécute alors les inputs en \textbf{vagues de 5}~: 5 partent en
+parallèle, on attend qu'ils finissent, puis les 5 suivants. Pour 50
+inputs avec \texttt{max\_concurrency=5}, on a 10 vagues séquentielles.
+
+\subsubsection*{Étape 4 — Le speedup observé}
+
+Pour 4 inputs à $\sim$2 s chacun~:
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Boucle for} : $\sim$8 s
+  \item \textbf{batch()}    : $\sim$2 à 3 s
+  \item \textbf{Speedup}    : $\times 3$ à $\times 4$
+\end{itemize}
+
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 2 — batch() vs boucle for
+======================================================================
+\end{verbatim}
+
+Boucle for~: 32.30\,s pour 4 concepts\\
+batch()   ~: 8.30\,s pour 4 concepts\\
+$\rightarrow$ Speedup~: $\times 3.89$
+
+\textbf{Exemple (les décorateurs) :}
+
+Un décorateur est une fonction qui <<~enveloppe~>> une autre fonction pour
+modifier son comportement sans changer son code original. C'est comme
+ajouter une couche de papier cadeau autour d'un cadeau~: le\dots
+\end{tcolorbox}
+
+\subsection{Vérification dans LangSmith}
+
+Le run racine s'appelle \texttt{RunnableSequence.batch} et contient N
+sous-runs frères, chacun étant un \texttt{RunnableSequence} (la chaîne
+exécutée sur un input). Dans la timeline, on voit clairement les N barres
+parallèles. Le rapport \emph{total\_tokens} sur le run racine agrège les
+N appels.
+
+\begin{quote}\itshape
+Dans LangSmith, un \texttt{.batch()} produit un seul run parent avec N
+enfants frères. Si tu vois N runs racines distincts (au lieu d'un parent
+avec N enfants), c'est que tu as utilisé une boucle \texttt{for} et pas
+\texttt{.batch()}.
+\end{quote}
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item \texttt{chain.batch(inputs)} parallélise N invocations d'une
+        \textbf{même} chaîne sur une liste de N dicts d'entrée.
+  \item Ne pas confondre avec \texttt{RunnableParallel} : batch est
+        « plusieurs inputs / même chaîne », RunnableParallel est
+        « même input / plusieurs chaînes ».
+  \item L'ordre de sortie est garanti identique à l'ordre d'entrée.
+  \item \texttt{config=\{"max\_concurrency": N\}} limite le nombre
+        d'appels concurrents pour respecter les rate limits.
+  \item Speedup typique~: $\times 3$ à $\times 4$ pour 4 inputs, avec
+        plafonnement progressif quand N augmente.
+\end{enumerate}
+\par}
+
+% #####################################################################
+% #####################################################################
+\section{Schéma Pydantic enrichi avec un champ \texttt{analogy}}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice bonus 3. Étendre un schéma Pydantic sans toucher au prompt]
+Ajoute un champ \texttt{analogy: str} au schéma Pydantic de la Phase 1
+(analogie avec un objet ou une situation du quotidien). Vérifie que le
+modèle remplit ce champ \textbf{sans aucune modification du prompt}.
+
+\textbf{Contrainte}~: la \texttt{description=} du nouveau champ doit
+suffire à piloter le contenu. Pas de \texttt{ChatPromptTemplate} modifié,
+pas de système re-rédigé. Juste le schéma.
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Mesurer concrètement la \emph{viscosité} (faible) d'un changement
+        avec \texttt{with\_structured\_output}.
+  \item Comprendre que \texttt{Field(description=\dots)} est un véritable
+        levier de \emph{prompt engineering}.
+  \item Voir la mise à jour du tool schema dans LangSmith en direct.
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\begin{center}
+\begin{tikzpicture}[node distance=4mm and 12mm]
+  \node[schema] (old) {\texttt{Explanation}\\\scriptsize (Phase 1)};
+  \node[data, right=of old] (oldfields)
+      {\texttt{concept}\\
+       \texttt{intuition}\\
+       \texttt{code\_example}\\
+       \texttt{pitfall}};
+
+  \node[schema, below=14mm of old, fill=teal!15] (new) {\texttt{ExplanationWithAnalogy}\\\scriptsize (bonus)};
+  \node[data, right=of new] (newfields)
+      {\texttt{concept}\\
+       \texttt{intuition}\\
+       \textbf{\texttt{analogy}}\\
+       \texttt{code\_example}\\
+       \texttt{pitfall}};
+
+  \draw[flow] (old) -- (oldfields);
+  \draw[flow] (new) -- (newfields);
+  \draw[flowdata, draw=orange!70!black, very thick] (old) -- (new)
+       node[label, midway, right]{1 champ ajouté};
+\end{tikzpicture}
+\end{center}
+
+Une seule ligne change~: l'ajout du champ \texttt{analogy: str = Field(\dots)}
+dans la classe. Le reste du code applicatif est strictement identique.
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+from pydantic import BaseModel, Field
+from phase1_explain import EXPLAIN_PROMPT
+from config import get_model
+
+
+class ExplanationWithAnalogy(BaseModel):
+    """Version enrichie : on rajoute une analogie du quotidien."""
+
+    concept: str = Field(description="Le concept expliqué.")
+    intuition: str = Field(description="Explication intuitive en 3 phrases.")
+    analogy: str = Field(
+        description=(
+            "Une analogie avec un objet ou une situation du quotidien "
+            "(cuisine, sport, bureau...) qui éclaire le concept pour un débutant. "
+            "Une seule phrase percutante."
+        )
+    )
+    code_example: str = Field(description="Un exemple de code minimal et commenté.")
+    pitfall: str = Field(description="Un piège classique sur ce concept.")
+
+
+def exercise_3() -> None:
+    # Une seule ligne change : le schéma passé à with_structured_output.
+    model = get_model().with_structured_output(ExplanationWithAnalogy)
+    chain = EXPLAIN_PROMPT.partial(level="débutant") | model
+
+    for concept in ["les décorateurs", "le polymorphisme", "le contexte avec `with`"]:
+        result = chain.invoke({"concept": concept})
+        print(f"\n--- {concept} ---")
+        print(f"Analogie : {result.analogy}")
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — Étendre la classe Pydantic}
+
+L'ajout d'un champ se fait comme dans n'importe quel \texttt{BaseModel}
+Pydantic~: une nouvelle ligne avec un nom, un type, et un
+\texttt{Field(description=\dots)}. Le champ devient automatiquement
+\textbf{requis} (Pydantic exigera sa présence).
+
+\subsubsection*{Étape 2 — La seule ligne d'application qui change}
+
+\begin{pythoncode}
+# Avant
+model = get_model().with_structured_output(Explanation)
+
+# Après
+model = get_model().with_structured_output(ExplanationWithAnalogy)
+\end{pythoncode}
+
+\textbf{C'est tout.} Le prompt système n'a pas bougé. Le \texttt{.partial()}
+n'a pas bougé. Le \texttt{|} n'a pas bougé. Le LLM va recevoir le nouveau
+tool schema et le remplir intégralement.
+
+\subsubsection*{Étape 3 — La \texttt{description=} fait tout le travail}
+
+Le LLM ne sait pas \emph{a priori} ce qu'on attend d'un champ
+\texttt{analogy}. C'est la \texttt{description=} qui le lui dit~:
+
+\begin{quote}\itshape
+\textit{« Une analogie avec un objet ou une situation du quotidien
+(cuisine, sport, bureau\dots) qui éclaire le concept pour un débutant.
+Une seule phrase percutante. »}
+\end{quote}
+
+Trois éléments importants dans cette description~:
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Domaine} : « cuisine, sport, bureau » — donne des exemples
+        concrets de registre attendu.
+  \item \textbf{Public} : « pour un débutant » — calibre la simplicité.
+  \item \textbf{Forme} : « une seule phrase percutante » — limite la
+        longueur, force la concision.
+\end{itemize}
+
+C'est du \emph{prompt engineering} appliqué directement au schéma.
+
+\subsubsection*{Étape 4 — La force de \texttt{with\_structured\_output}}
+
+C'est cette élasticité qu'on cherche en production~: les contrats de
+sortie évoluent (un manager veut un nouveau champ, un produit veut une
+nouvelle métadonnée, etc.). Avec un parseur texte classique, il faudrait
+rééditer le prompt, gérer les cas d'oubli, écrire du code de fallback.
+Avec \texttt{with\_structured\_output}, on ajoute le champ \textbf{et c'est
+tout}.
+
+\begin{quote}\itshape
+\textbf{Coût} : la description du nouveau champ ajoute quelques tokens
+au prompt (le schéma est envoyé à chaque appel). Le coût marginal d'un
+champ supplémentaire est de $\sim$30 à 80 tokens — négligeable.
+\end{quote}
+
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 3 — Schéma Pydantic enrichi avec un champ analogy
+======================================================================
+\end{verbatim}
+
+\textbf{--- les décorateurs ---}\\
+Analogie~: C'est comme emballer un cadeau~: tu prends ta fonction (le
+cadeau), tu la mets dans du papier cadeau (le décorateur), et maintenant
+le cadeau a une belle présentation en plus, sans que le contenu ne
+change.
+
+\textbf{--- le polymorphisme ---}\\
+Analogie~: C'est comme une télécommande universelle~: le bouton
+<<~play~>> fait jouer la musique sur un haut-parleur, mais lance la
+vidéo sur un téléviseur. Même bouton, résultats différents selon
+l'appareil.
+
+\textbf{--- le contexte avec \texttt{with} ---}\\
+Analogie~: C'est comme emprunter un livre à la bibliothèque~:
+\texttt{with} c'est le système qui te force à le rendre à la date
+limite, même si tu l'oublies. Sans \texttt{with}, tu dois te souvenir
+tout seul de le rendre.
+\end{tcolorbox}
+
+\subsection{Vérification dans LangSmith}
+
+Dans l'onglet \emph{Tool calls} du \texttt{ChatAnthropic}, on voit le
+nouveau tool schema avec 5 champs au lieu de 4. Le champ \texttt{analogy}
+apparaît avec sa description complète. L'output du run racine est un
+objet \texttt{ExplanationWithAnalogy} dont les 5 champs sont remplis.
+
+\begin{center}
+\begin{tikzpicture}[every node/.style={font=\footnotesize\ttfamily, anchor=west}]
+  \node                              (a) {ChatAnthropic (structured\_output=ExplanationWithAnalogy)};
+  \node[below=1mm of a, xshift=4mm]  (b) {Tools : [\{};
+  \node[below=1mm of b, xshift=4mm]  (c) {  name: "ExplanationWithAnalogy",};
+  \node[below=1mm of c]              (d) {  parameters: \{ concept, intuition,};
+  \node[below=1mm of d, xshift=8mm]  (e) {analogy, code\_example, pitfall \}};
+  \node[below=1mm of e, xshift=-12mm](f) {\}]};
+\end{tikzpicture}
+\end{center}
+
+\begin{quote}\itshape
+Modifier la \texttt{description=} d'un champ et relancer : tu vois
+immédiatement le changement dans le tool schema envoyé au LLM, et la
+sortie générée se met à jour conformément. C'est la boucle la plus rapide
+de prompt engineering qu'on puisse avoir.
+\end{quote}
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item Ajouter un champ à un schéma Pydantic = \textbf{une ligne}, plus
+        \textbf{un changement} du nom passé à \texttt{with\_structured\_output}.
+  \item La \texttt{description=} d'un \texttt{Field} \textbf{est} une
+        partie du prompt. Soigne-la (registre, public, forme).
+  \item Le coût marginal d'un champ ajouté est négligeable ($\sim$30 à
+        80 tokens supplémentaires).
+  \item Dans LangSmith, le tool schema reflète immédiatement les changements
+        de description — boucle de prompt engineering ultra-rapide.
+\end{enumerate}
+\par}
+
+% #####################################################################
+% #####################################################################
+\section{Router avec \texttt{RunnableBranch} et classifieur LLM}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice bonus 4. Aiguillage dynamique vers 3 sous-chaînes spécialisées]
+Crée un \emph{router} qui choisit automatiquement entre 3 sous-chaînes
+selon que le concept Python est de catégorie \textbf{syntaxe} (def, lambda,
+comprehensions\dots), \textbf{paradigme} (POO, fonctionnel,
+polymorphisme\dots) ou \textbf{écosystème} (pip, venv, pytest\dots).
+Utilise une mini-chaîne LLM de classification en amont pour décider du
+routage.
+
+\textbf{Contrainte}~: tout doit rester un seul \texttt{Runnable} LCEL
+pour préserver streaming, batching, et tracing LangSmith unifié.
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Maîtriser le \textbf{pattern router}~: classifieur LLM + sous-chaînes
+        spécialisées + \texttt{RunnableBranch}.
+  \item Utiliser \texttt{Literal[\dots]} dans un schéma Pydantic pour
+        garantir un ensemble fermé de catégories.
+  \item Combiner \texttt{RunnablePassthrough.assign} et
+        \texttt{RunnableBranch} pour enrichir puis brancher.
+  \item Repérer dans LangSmith les \textbf{trois appels LLM} qu'un router
+        engendre par requête (et le surcoût associé).
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\begin{center}
+\begin{tikzpicture}
+  \node[data] (in) {\{"concept": "lambda"\}};
+  \node[block, below=of in] (assign) {RunnablePassthrough.assign\\(category=classifier)};
+  \node[data, below=of assign] (enriched) {\{"concept": "lambda",\\\ "category": "syntaxe"\}};
+  \node[block, below=of enriched] (branch) {RunnableBranch\\(3 cas + défaut)};
+  \node[llm, below=of branch] (out) {réponse spécialisée\\(AIMessage)};
+
+  \draw[flowdata] (in)       -- (assign);
+  \draw[flow]     (assign)   -- (enriched) node[label, midway, right]{enrichit le dict};
+  \draw[flowdata] (enriched) -- (branch);
+  \draw[flow]     (branch)   -- (out)      node[label, midway, right]{choisit la sous-chaîne};
+\end{tikzpicture}
+\end{center}
+
+\subsubsection*{Zoom sur le \texttt{RunnableBranch}}
+
+\begin{center}
+\begin{tikzpicture}[node distance=5mm and 12mm]
+  \node[data] (in) {\{"concept": "lambda",\\\ "category": "syntaxe"\}};
+  \node[predicate, right=18mm of in] (p1) {category\\=="syntaxe"?};
+  \node[predicate, below=10mm of p1] (p2) {category\\=="paradigme"?};
+  \node[block, below=10mm of p2] (def) {ecosysteme\_chain\\\scriptsize (défaut)};
+  \node[llm, right=of p1] (c1) {syntaxe\_chain};
+  \node[llm, right=of p2] (c2) {paradigme\_chain};
+
+  \draw[flowdata] (in) -- (p1);
+  \draw[flow]     (p1) -- node[label, above]{vrai} (c1);
+  \draw[flow]     (p1) -- node[label, right]{faux} (p2);
+  \draw[flow]     (p2) -- node[label, above]{vrai} (c2);
+  \draw[flow]     (p2) -- node[label, right]{faux} (def);
+\end{tikzpicture}
+\end{center}
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+from typing import Literal
+from pydantic import BaseModel, Field
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import (
+    RunnableBranch, RunnableLambda, RunnablePassthrough,
+)
+from config import get_model
+
+
+class CategoryResult(BaseModel):
+    """Catégorie d'un concept Python pour router vers la bonne sous-chaîne."""
+    category: Literal["syntaxe", "paradigme", "ecosysteme"] = Field(
+        description=(
+            "Catégorise le concept :\n"
+            " - 'syntaxe'    : éléments du langage (def, lambda, comprehensions, with, yield...)\n"
+            " - 'paradigme'  : concepts de design (POO, fonctionnel, héritage, polymorphisme...)\n"
+            " - 'ecosysteme' : outils/bibliothèques (pip, venv, pytest, numpy, requests...)"
+        )
+    )
+
+
+def build_classifier():
+    """Mini-chaîne qui catégorise un concept en 3 classes."""
+    classify_prompt = ChatPromptTemplate.from_messages([
+        ("system", "Tu classes des concepts Python en 3 catégories. "
+                   "Ne réponds que par la catégorie."),
+        ("human",  "Concept à catégoriser : {concept}"),
+    ])
+    return (
+        classify_prompt
+        | get_model().with_structured_output(CategoryResult)
+        | RunnableLambda(lambda r: r.category)
+    )
+
+
+def build_specialized_chain(focus: str):
+    """Construit une sous-chaîne avec un prompt système orienté `focus`."""
+    prompt = ChatPromptTemplate.from_messages([
+        ("system",
+         "Tu es un assistant Python. Le concept à expliquer relève de la "
+         f"catégorie '{focus}'. Adapte ton explication en conséquence :\n" +
+         {
+             "syntaxe":    "insiste sur la syntaxe exacte, montre un mini exemple et un anti-exemple.",
+             "paradigme":  "insiste sur la philosophie, le 'pourquoi', les implications de design.",
+             "ecosysteme": "insiste sur l'usage pratique, l'installation, les commandes shell typiques.",
+         }[focus]),
+        ("human", "Explique : {concept}"),
+    ])
+    return prompt | get_model()
+
+
+def build_router():
+    """Le routeur complet : classifie puis branche."""
+    classifier        = build_classifier()
+    syntaxe_chain     = build_specialized_chain("syntaxe")
+    paradigme_chain   = build_specialized_chain("paradigme")
+    ecosysteme_chain  = build_specialized_chain("ecosysteme")
+
+    branch = RunnableBranch(
+        (lambda x: x["category"] == "syntaxe",   syntaxe_chain),
+        (lambda x: x["category"] == "paradigme", paradigme_chain),
+        ecosysteme_chain,  # défaut : si rien ne matche
+    )
+
+    return RunnablePassthrough.assign(category=classifier) | branch
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — Le vocabulaire de routage (\texttt{CategoryResult})}
+
+Avant de router, il faut un \textbf{ensemble fermé} de catégories. Le
+\texttt{Literal["syntaxe", "paradigme", "ecosysteme"]} est crucial~:
+il \emph{garantit} que le LLM ne pourra pas renvoyer \texttt{"truc"} ou
+\texttt{"je sais pas"}. La \texttt{description=} du champ sert de
+mini-prompt qui explique au modèle \emph{comment} classer.
+
+\subsubsection*{Étape 2 — Le classifieur}
+
+Trois maillons en pipeline~:
+\begin{enumerate}[leftmargin=*]
+  \item \texttt{classify\_prompt}~: \texttt{\{"concept": "lambda"\}}
+        $\rightarrow$ messages formatés.
+  \item \texttt{model.with\_structured\_output(CategoryResult)}~:
+        messages $\rightarrow$ objet \texttt{CategoryResult(category="syntaxe")}.
+  \item \texttt{RunnableLambda(lambda r: r.category)}~: objet $\rightarrow$
+        chaîne \texttt{"syntaxe"}.
+\end{enumerate}
+
+Le maillon 3 n'est pas cosmétique~: il rend la sortie utilisable comme
+\textbf{valeur de comparaison} dans les prédicats du
+\texttt{RunnableBranch}.
+
+\subsubsection*{Étape 3 — Les sous-chaînes spécialisées}
+
+\texttt{build\_specialized\_chain(focus)} est une \emph{fabrique}~: on
+l'appelle 3 fois avec des \texttt{focus} différents et on obtient 3
+\texttt{Runnable} distincts, chacun avec sa personnalité dans le system
+prompt.
+
+\begin{quote}\itshape
+La spécialisation se fait à la \textbf{construction}, pas à l'appel.
+\texttt{build\_specialized\_chain("syntaxe")} renvoie un \texttt{Runnable}
+prêt à l'emploi qui ne sait répondre que dans le style « syntaxe ».
+\end{quote}
+
+\subsubsection*{Étape 4 — Le \texttt{RunnableBranch}}
+
+\texttt{RunnableBranch} est le \texttt{if/elif/else} de LCEL. Trois
+points clés~:
+
+\begin{itemize}[leftmargin=*]
+  \item Les prédicats sont évalués \textbf{dans l'ordre}, le premier qui
+        renvoie \texttt{True} gagne (court-circuit).
+  \item Si \emph{aucun} prédicat ne matche, la chaîne par défaut s'exécute
+        — elle est \textbf{obligatoire}.
+  \item La sous-chaîne sélectionnée reçoit \textbf{l'input complet} (le
+        dict entier), pas juste le résultat du prédicat.
+\end{itemize}
+
+\subsubsection*{Étape 5 — L'enrichissement avant branchement}
+
+Le \texttt{RunnableBranch} a besoin que \texttt{category} \textbf{soit
+déjà dans l'input} pour que ses prédicats puissent le lire. C'est le rôle
+de \texttt{RunnablePassthrough.assign}~:
+
+\begin{quote}\itshape
+\texttt{RunnablePassthrough.assign(category=classifier)} appelle le
+classifieur et ajoute le résultat sous la clé \texttt{category}, sans
+toucher aux clés existantes. C'est l'équivalent d'un
+\texttt{SELECT *, expr AS col} en SQL.
+\end{quote}
+
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 4 — Router avec RunnableBranch
+======================================================================
+\end{verbatim}
+
+\textbf{[~~~syntaxe]} les list comprehensions\\
+$\rightarrow$ \#~List Comprehensions en Python \quad \#\#~Concept \quad Une
+\textbf{list comprehension} est une syntaxe compacte pour créer une liste
+en appliquant une expression à chaque élément d'une séquence, avec
+possibilité de f\dots
+
+\textbf{[~paradigme]} le polymorphisme\\
+$\rightarrow$ \#~Le Polymorphisme~: Une Philosophie de Flexibilité \quad
+\#\#~L'Essence Philosophique \quad Le polymorphisme incarne une idée
+fondamentale~: \textbf{<<~une même interface, plusieurs formes~>>}. C'est
+la capacité d'une en\dots
+
+\textbf{[ecosysteme]} pytest\\
+$\rightarrow$ \#~pytest -- Framework de Test Python \quad \#\#~Concept Clé
+\quad \textbf{pytest} est un framework de test moderne et puissant pour
+Python. Il simplifie l'écriture et l'exécution de tests avec une syntaxe
+minimaliste\dots
+
+\textbf{[~~~syntaxe]} lambda\\
+$\rightarrow$ \#~Lambda en Python \quad \#\#~Concept \quad Une
+\textbf{lambda} est une fonction anonyme (sans nom) définie en une seule
+ligne. Elle permet de créer rapidement des petites fonctions sans
+utiliser \texttt{def}. \quad \#\#~Syntaxe exa\dots
+\end{tcolorbox}
+
+\subsection{Vérification dans LangSmith}
+
+\subsubsection*{L'arbre d'exécution}
+
+Pour le concept \texttt{"lambda"}, on observe \textbf{3 appels LLM}~:
+
+\begin{center}
+\begin{tikzpicture}[every node/.style={font=\footnotesize\ttfamily, anchor=west}]
+  \node                              (a) {RunnableSequence (router)};
+  \node[below=1mm of a, xshift=4mm]  (b) {RunnableAssign<category>};
+  \node[below=1mm of b, xshift=4mm]  (c) {classifier ← LLM \#1 (structured\_output=CategoryResult)};
+  \node[below=1mm of c]              (d) {  → "syntaxe"};
+  \node[below=1mm of d, xshift=-4mm] (e) {RunnableBranch};
+  \node[below=1mm of e, xshift=4mm]  (f) {branch[0]: syntaxe\_chain};
+  \node[below=1mm of f, xshift=4mm]  (g) {ChatAnthropic ← LLM \#2 (réponse spécialisée)};
+\end{tikzpicture}
+\end{center}
+
+\subsubsection*{Les quatre choses à regarder}
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{L'arbre lui-même}~: tu vois \emph{visuellement} le passage
+        par le classifieur puis la branche choisie. C'est l'aiguillage
+        dynamique en image.
+  \item \textbf{Premier \texttt{ChatAnthropic}} (classifieur)~: onglet
+        \emph{Output} → l'objet \texttt{CategoryResult} et le tool-call
+        que Claude a utilisé.
+  \item \textbf{Deuxième \texttt{ChatAnthropic}} (réponse spécialisée)~:
+        le system prompt commence par « Tu es un assistant Python\dots
+        catégorie 'syntaxe' ». Précieux pour debugger.
+  \item \textbf{Onglet \emph{Costs}} : tokens et coût agrégés sur les 2
+        (ou 3, si on garde le \texttt{debug\_chain}) appels. Permet de
+        chiffrer le surcoût du pattern router.
+\end{enumerate}
+
+\begin{quote}\itshape
+Compare deux runs dans l'UI : \texttt{"lambda"} déclenche
+\texttt{syntaxe\_chain}, \texttt{"pytest"} déclenche
+\texttt{ecosysteme\_chain}. On voit littéralement \textbf{la branche
+choisie} changer selon le concept.
+\end{quote}
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Pattern router} = classifieur LLM + sous-chaînes
+        spécialisées + \texttt{RunnableBranch}.
+  \item \texttt{with\_structured\_output} + \texttt{Literal} = garantie
+        que la sortie de classification est dans un ensemble fermé, donc
+        routable sans validation supplémentaire.
+  \item \texttt{RunnablePassthrough.assign(\dots)} enrichit le dict de
+        contexte au fil de la pipeline, sans perdre les clés précédentes.
+  \item Le tout reste un \textbf{seul \texttt{Runnable}}~:
+        \texttt{router.invoke}, \texttt{router.batch},
+        \texttt{router.astream} fonctionnent — et LangSmith trace l'arbre
+        complet en un seul run.
+  \item Surcoût~: \textbf{2 appels LLM par requête} (classification +
+        réponse), au lieu d'un seul avec un prompt méga-universel.
+        Acceptable pour gagner en qualité, mesurable dans LangSmith.
+\end{enumerate}
+\par}
+
+% #####################################################################
+% #####################################################################
+\section{Async avec \texttt{asyncio.gather} vs \texttt{RunnableParallel}}
+% #####################################################################
+% #####################################################################
+
+\begin{tcolorbox}[title=Exercice bonus 5. La voie async pure et sa comparaison avec RunnableParallel]
+Réécris la démo multi-niveaux en \textbf{async} avec \texttt{await
+chain.ainvoke(\dots)} et \texttt{asyncio.gather(\dots)}. Compare les
+durées avec la version \texttt{RunnableParallel} (synchrone et asynchrone).
+
+\textbf{Contrainte}~: utiliser \texttt{asyncio.run()} comme point d'entrée
+pour la fonction \texttt{async}, et \texttt{await} sur \texttt{.ainvoke()}
+(la variante asynchrone de \texttt{.invoke()}).
+
+\bigskip
+\noindent\textbf{Objectifs pédagogiques}
+\begin{itemize}[leftmargin=*]
+  \item Connaître les méthodes \texttt{.ainvoke()}, \texttt{.abatch()},
+        \texttt{.astream()} — les variantes async de tous les
+        \texttt{Runnable}.
+  \item Comprendre que \texttt{RunnableParallel} utilise asyncio
+        \textbf{sous le capot}~: la version async et la version sync
+        donnent des temps quasi identiques.
+  \item Choisir entre \texttt{asyncio.gather} (contrôle explicite) et
+        \texttt{RunnableParallel} (composition implicite).
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Solution}
+
+\subsubsection{Architecture}
+
+\begin{center}
+\begin{tikzpicture}[node distance=4mm and 14mm]
+  \node[data] (in) {\{"concept": "générateurs"\}};
+
+  \node[block, below left=14mm and 14mm of in] (gather)
+       {asyncio.gather\\\scriptsize (3 ainvoke en parallèle)};
+  \node[parallel, below right=14mm and 14mm of in] (par)
+       {RunnableParallel.ainvoke\\\scriptsize (3 chaînes en parallèle)};
+
+  \node[llm, below=of gather] (g_out) {résultats : tuple\\(beg\_r, int\_r, adv\_r)};
+  \node[llm, below=of par]    (p_out) {résultats : dict\\\{"beginner": \dots, \dots\}};
+
+  \draw[flowdata] (in) -- (gather);
+  \draw[flowdata] (in) -- (par);
+  \draw[flow] (gather) -- (g_out);
+  \draw[flow] (par) -- (p_out);
+
+  \node[font=\scriptsize\itshape, below=24mm of in] {même latence, même coût, deux styles d'écriture};
+\end{tikzpicture}
+\end{center}
+
+Les deux approches s'appuient sur \textbf{le même runtime asyncio}~:
+event loop unique, 3 coroutines en concurrence, attente non bloquante.
+La différence est purement stylistique.
+
+\subsubsection{Le code complet}
+
+\begin{pythoncode}
+import asyncio
+import time
+from langchain_core.runnables import RunnableParallel
+from phase1_explain import explain_chain_for_level
+
+
+async def exercise_5() -> None:
+    concept      = "les générateurs Python"
+    beginner     = explain_chain_for_level("débutant")
+    intermediate = explain_chain_for_level("intermédiaire")
+    advanced     = explain_chain_for_level("avancé")
+
+    # --- Version asyncio.gather pure ---
+    t0 = time.perf_counter()
+    beg_r, int_r, adv_r = await asyncio.gather(
+        beginner.ainvoke({"concept": concept}),
+        intermediate.ainvoke({"concept": concept}),
+        advanced.ainvoke({"concept": concept}),
+    )
+    gather_time = time.perf_counter() - t0
+    print(f"asyncio.gather    : {gather_time:.2f}s")
+
+    # --- Version RunnableParallel avec .ainvoke (async aussi) ---
+    parallel = RunnableParallel(
+        beginner=beginner, intermediate=intermediate, advanced=advanced,
+    )
+    t0 = time.perf_counter()
+    results = await parallel.ainvoke({"concept": concept})
+    parallel_time = time.perf_counter() - t0
+    print(f"RunnableParallel  : {parallel_time:.2f}s")
+
+    # --- Version synchrone pour référence ---
+    t0 = time.perf_counter()
+    parallel.invoke({"concept": concept})
+    sync_time = time.perf_counter() - t0
+    print(f"Sync (RunnablePar): {sync_time:.2f}s")
+
+
+# Point d'entrée : asyncio.run lance la coroutine
+if __name__ == "__main__":
+    asyncio.run(exercise_5())
+\end{pythoncode}
+
+\subsubsection{Explications pas à pas}
+
+\subsubsection*{Étape 1 — Le préfixe \texttt{a} : la version async de tout}
+
+LCEL définit une variante async pour chaque méthode synchrone d'un
+\texttt{Runnable}~:
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Synchrone} & \textbf{Asynchrone} \\
+\midrule
+\texttt{.invoke(input)}      & \texttt{.ainvoke(input)} \\
+\texttt{.batch(inputs)}      & \texttt{.abatch(inputs)} \\
+\texttt{.stream(input)}      & \texttt{.astream(input)} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Les versions async retournent des \texttt{coroutine}, à attendre avec
+\texttt{await} dans un contexte \texttt{async def}.
+
+\subsubsection*{Étape 2 — \texttt{asyncio.gather} pur}
+
+\texttt{asyncio.gather(*coros)} prend N coroutines et les exécute en
+\textbf{concurrence} sur l'event loop. \texttt{await} sur le résultat
+attend que toutes terminent et renvoie un \textbf{tuple} des résultats
+dans l'ordre des arguments~:
+
+\begin{pythoncode}
+beg_r, int_r, adv_r = await asyncio.gather(
+    beginner.ainvoke({"concept": concept}),     # → beg_r
+    intermediate.ainvoke({"concept": concept}), # → int_r
+    advanced.ainvoke({"concept": concept}),     # → adv_r
+)
+\end{pythoncode}
+
+C'est l'équivalent \emph{asynchrone} d'un \texttt{ThreadPoolExecutor}~:
+le main thread ne fait rien pendant que les 3 appels HTTP sont en vol.
+
+\subsubsection*{Étape 3 — \texttt{RunnableParallel} utilise asyncio sous le capot}
+
+Quand on appelle \texttt{parallel.invoke(\dots)} (synchrone), LCEL crée
+en interne un event loop, lance les branches comme des coroutines, et
+attend le tout. Quand on appelle \texttt{parallel.ainvoke(\dots)}, on
+réutilise l'event loop existant — plus efficace, surtout dans une app
+web déjà en async.
+
+\begin{quote}\itshape
+\textbf{Conséquence pratique} : \texttt{parallel.invoke()} et
+\texttt{await parallel.ainvoke()} donnent des temps \emph{identiques} à
+la milliseconde près. Le choix est dicté par le contexte d'appel
+(synchrone ou asynchrone), pas par la performance.
+\end{quote}
+
+\subsubsection*{Étape 4 — Quand utiliser \texttt{gather} vs \texttt{RunnableParallel}}
+
+\begin{center}
+\begin{tabular}{p{6.5cm} p{6.5cm}}
+\toprule
+\textbf{\texttt{asyncio.gather}} & \textbf{\texttt{RunnableParallel}} \\
+\midrule
+Bibliothèque standard Python.   & Primitive LCEL. \\[1mm]
+Contrôle explicite du flot de coroutines.
+& Composition déclarative dans une chaîne. \\[1mm]
+Bien pour du code applicatif~: routes FastAPI, boucle de chat, jobs.
+& Bien pour la \emph{composition} dans un \texttt{Runnable} (qui sera lui-même streamé, batché, tracé). \\[1mm]
+Pas de tracing LangSmith par défaut (faut envelopper manuellement).
+& Tracing LangSmith automatique. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{quote}\itshape\sloppy
+\textbf{Règle pratique} : \texttt{RunnableParallel} dans les
+\textbf{chaînes} (parce que c'est composable et tracé) ;
+\texttt{asyncio.gather} dans le \textbf{code applicatif} (parce que
+c'est explicite et standard Python).
+\end{quote}
+
+\subsubsection*{Étape 5 — Le point d'entrée \texttt{asyncio.run}}
+
+Une fonction \texttt{async def} ne s'exécute pas avec un appel direct~:
+elle renvoie une coroutine non encore lancée. \texttt{asyncio.run(coro)}
+crée un event loop, exécute la coroutine, et ferme proprement.
+
+\begin{pythoncode}
+async def exercise_5() -> None:
+    ...                          # contient des await
+
+# Dans le main, on emballe avec asyncio.run
+if __name__ == "__main__":
+    asyncio.run(exercise_5())
+\end{pythoncode}
+
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 5 — Async avec asyncio.gather vs RunnableParallel
+======================================================================
+\end{verbatim}
+
+asyncio.gather   ~: 8.74\,s\\
+RunnableParallel ~: 9.61\,s\\
+Sync (RunnablePar)~: 8.42\,s
+
+\textbf{Échantillon (les générateurs Python, débutant) :}
+
+Un générateur est une fonction spéciale qui produit des valeurs une à la
+fois, au lieu de tout calculer d'un coup. Imagine une usine qui fabrique
+des bonbons~: au lieu de fabriquer 1000 bonbons et les\dots
+
+\begin{verbatim}
+======================================================================
+[OK] Tous les exercices de la Phase 1 sont résolus.
+======================================================================
+\end{verbatim}
+\end{tcolorbox}
+
+\subsection{Vérification dans LangSmith}
+
+Les deux versions (\texttt{gather} et \texttt{RunnableParallel.ainvoke})
+produisent des arbres très similaires dans LangSmith. La différence~:
+
+\begin{itemize}[leftmargin=*]
+  \item \texttt{RunnableParallel.ainvoke}~: un \emph{seul} run racine
+        \texttt{RunnableParallel} avec 3 enfants (un par branche).
+  \item \texttt{asyncio.gather} avec 3 \texttt{.ainvoke()} séparés~:
+        \textbf{3 runs racines distincts}, chacun étant la trace d'un
+        \texttt{RunnableSequence}. Pas d'agrégation automatique.
+\end{itemize}
+
+Pour avoir un seul run agrégé en \texttt{gather}, il faut envelopper
+manuellement avec \texttt{trace} de \texttt{langsmith}~:
+
+\begin{pythoncode}
+from langsmith import trace
+
+with trace("multi-level parallel"):
+    beg_r, int_r, adv_r = await asyncio.gather(...)
+\end{pythoncode}
+
+\begin{quote}\itshape
+La traçabilité \textbf{automatique} est un argument fort pour
+\texttt{RunnableParallel}. Dès qu'on sort de LCEL, le tracing devient
+manuel.
+\end{quote}
+
+\subsection*{Récapitulatif}
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir :}
+\begin{enumerate}[leftmargin=*]
+  \item Tout \texttt{Runnable} expose une variante async~:
+        \texttt{.ainvoke}, \texttt{.abatch}, \texttt{.astream}. Le préfixe
+        \texttt{a} = \emph{async}.
+  \item \texttt{asyncio.gather(*coros)} lance N coroutines en concurrence
+        et renvoie un tuple des résultats dans l'ordre.
+  \item \texttt{RunnableParallel} utilise asyncio sous le capot —
+        \texttt{.invoke()} et \texttt{await .ainvoke()} ont les mêmes
+        performances.
+  \item Règle pratique~: \texttt{RunnableParallel} dans les chaînes (pour
+        la composition et le tracing), \texttt{asyncio.gather} dans le
+        code applicatif (pour le contrôle explicite).
+  \item \texttt{asyncio.run(coro)} est le point d'entrée pour appeler une
+        coroutine depuis un contexte synchrone (script, \texttt{if
+        \_\_name\_\_ == "\_\_main\_\_"}).
+\end{enumerate}
+\par}
+
 
 \end{document}

@@ -14,7 +14,6 @@ from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
-from langchain_community.document_loaders import WebBaseLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 from langchain_classic.retrievers.multi_query import MultiQueryRetriever
@@ -29,6 +28,7 @@ from phase2_rag import (
     build_rag_chain,
     build_rag_chain_with_sources,
     format_docs,
+    load_web_pages,
     RAG_PROMPT,
 )
 
@@ -60,9 +60,7 @@ def build_vectorstore_with_chunk_size(chunk_size: int, persist_dir: str) -> Chro
         )
 
     print(f"  → Indexation chunk_size={chunk_size} dans {persist_dir}...")
-    loader = WebBaseLoader(PYTHON_DOCS_URLS)
-    loader.requests_kwargs = {"headers": {"User-Agent": "PyTutor-Edu/0.1"}}
-    raw_docs = loader.load()
+    raw_docs = load_web_pages(PYTHON_DOCS_URLS)
 
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
@@ -439,10 +437,12 @@ def exercise_6() -> None:
 
 def main() -> None:
     # Exercices automatiques (pas d'input utilisateur, pas de LangSmith)
-    #exercise_1()
-    #exercise_3()
+    exercise_1()
+    exercise_2_interactive()
+    exercise_3()
+    exercise_4_langsmith()
     exercise_5()
-    # exercise_6()
+    exercise_6()
 
     # Décommente ceci si tu as configuré LangSmith dans ton .env
     #exercise_4_langsmith()

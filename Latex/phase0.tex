@@ -1,0 +1,686 @@
+% =====================================================================
+% Phase 0 — Introduction, motivation, et installation du projet PyTutor
+% Compilation : pdflatex -shell-escape phase0.tex (deux fois pour la TOC)
+% Pré-requis  : pygmentize (pip install Pygments) + paquet TeX "minted"
+% =====================================================================
+\documentclass[11pt,a4paper]{article}
+
+% ---------- Encodage & langue ----------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+
+% ---------- Mise en page ----------
+\usepackage[a4paper,margin=2.2cm]{geometry}
+\usepackage{parskip}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!60!black,
+  urlcolor=blue!60!black,
+  citecolor=blue!60!black,
+  bookmarksopen=true,
+  bookmarksopenlevel=2,
+}
+
+% ---------- Boîtes & callouts ----------
+\usepackage[most]{tcolorbox}
+\tcbset{
+  enhanced,
+  colback=blue!3,
+  colframe=blue!50!black,
+  fonttitle=\bfseries,
+  arc=2pt, boxrule=0.6pt,
+}
+
+% ---------- Code avec minted ----------
+\usepackage{minted}
+\setminted{
+  fontsize=\small,
+  linenos=true,
+  numbersep=6pt,
+  frame=lines,
+  framesep=2mm,
+  bgcolor=gray!4,
+  breaklines=true,
+  breakanywhere=true,
+  python3=true,
+  tabsize=4,
+}
+\newminted{python}{}
+\newminted[bashcode]{bash}{linenos=false, fontsize=\footnotesize}
+\newminted[envcode]{ini}{linenos=false, fontsize=\footnotesize}
+
+% ---------- Titre ----------
+\title{\textbf{Phase 0 — Mise en route}\\
+\large Pourquoi LangChain~? Comment installer PyTutor en 15 minutes}
+\author{Cours PyTutor2}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+Ce document est le point d'entrée du cours \texttt{PyTutor2}. Il
+répond d'abord à la question \emph{« pourquoi LangChain~? »}, puis
+te guide pas à pas dans l'installation~: Python, PyCharm,
+environnement virtuel, dépendances (\texttt{requirements.txt}), clés
+API (\texttt{.env}), et la configuration centrale du projet
+(\texttt{config.py}). À la fin, tu lances ton premier appel à un
+modèle Claude en moins d'une commande et tu es prêt(e) pour la
+Phase 1.
+\end{abstract}
+
+\tableofcontents
+\bigskip
+
+% #####################################################################
+\section{Pourquoi ce cours~?}
+% #####################################################################
+
+\subsection{Ce que tu vas construire}
+
+En quatre phases, tu vas assembler un \textbf{tuteur Python} qui sait
+expliquer, chercher dans une documentation, et exécuter du code pour
+vérifier ses propres réponses~:
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Phase 1 — LangChain LCEL.} Tu apprends à composer des
+        chaînes de traitement avec l'opérateur \texttt{|}~:
+        \texttt{prompt | modèle | parser}. Tu manipules
+        \texttt{ChatPromptTemplate}, sorties typées Pydantic,
+        \texttt{RunnableParallel}, et streaming token par token.
+  \item \textbf{Phase 2 — RAG.} Tu construis un système qui
+        \emph{récupère} des passages de la doc Python officielle
+        avant de répondre. Tu maîtrises l'indexation (embeddings +
+        Chroma), le retriever LCEL, et la comparaison
+        \emph{similarity vs MMR}.
+  \item \textbf{Phase 3 — Agent.} Tu fabriques un agent qui décide
+        \emph{lui-même} quels outils appeler~: chercher dans la doc,
+        exécuter du code Python, générer un exercice, vérifier la
+        PEP 8. Tu observes la boucle \emph{Réfléchir-Agir-Observer}
+        en direct.
+\end{itemize}
+
+\subsection{Pourquoi LangChain~?}
+
+Construire une application LLM sans framework, c'est jouable —
+quelques requêtes HTTP, deux ou trois \texttt{f"..."} pour formater
+les prompts. Mais dès que tu veux~:
+
+\begin{itemize}[leftmargin=*]
+  \item Enchaîner plusieurs étapes (récupération, prompt, modèle,
+        parser) sans réinventer le tuyau à chaque fois,
+  \item Brancher un \emph{vector store} pour faire du RAG,
+  \item Donner à un modèle des \emph{outils} qu'il peut appeler en
+        autonomie (agent),
+  \item Tracer chaque appel pour déboguer une chaîne complexe,
+\end{itemize}
+
+\noindent\dots{} il te faut un \textbf{vocabulaire commun} et des
+\textbf{briques composables}. C'est exactement ce que fournit
+\textbf{LangChain~1.x} via \emph{LCEL} (LangChain Expression
+Language) et son module \texttt{langgraph} pour les agents.
+
+\begin{quote}\itshape
+\textbf{Règle pratique.} LangChain n'est pas un mur magique~: c'est
+un ensemble de \texttt{Runnable} qui se composent avec \texttt{|},
+\texttt{.batch}, \texttt{.stream}, \texttt{.invoke}, et qui
+s'observent dans \texttt{LangSmith}. Une fois ces 4 verbes maîtrisés,
+tout le reste se déduit.
+\end{quote}
+
+\subsection{Outils que tu vas utiliser}
+
+\begin{center}
+\begin{tabular}{p{3.6cm} p{12cm}}
+\toprule
+\textbf{Outil} & \textbf{Rôle} \\
+\midrule
+\textbf{Python 3.10+}     & Langage du projet. \\
+\textbf{PyCharm}          & IDE confortable (autocomplétion, debug, run). \\
+\textbf{venv}             & Environnement Python isolé pour ce projet. \\
+\textbf{LangChain 1.x}    & Composition de chaînes LCEL. \\
+\textbf{Chroma}           & Base vectorielle locale (Phase 2). \\
+\textbf{HuggingFace}      & Modèle d'embeddings local (Phase 2). \\
+\textbf{Claude (API)}     & Modèle LLM d'Anthropic (clé API requise). \\
+\textbf{LangSmith}        & Observabilité~: voir chaque appel LLM dans
+                            une UI web (recommandé). \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% #####################################################################
+\section{Installer Python}
+% #####################################################################
+
+\subsection{Vérifier ta version}
+
+Ouvre un terminal et tape~:
+
+\begin{bashcode}
+python3 --version
+\end{bashcode}
+
+Tu dois voir \texttt{Python 3.10.x} ou plus récent. Si la commande
+n'existe pas ou affiche une version inférieure, installe une version
+récente~:
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{macOS}~: \href{https://www.python.org/downloads/}{python.org}
+        ou via Homebrew~: \texttt{brew install python@3.12}.
+  \item \textbf{Windows}~: installeur officiel
+        \href{https://www.python.org/downloads/}{python.org}.
+        \emph{Coche bien} \texttt{Add Python to PATH} pendant
+        l'installation.
+  \item \textbf{Linux}~: ton gestionnaire de paquets, par exemple
+        \texttt{sudo apt install python3.12 python3.12-venv}.
+\end{itemize}
+
+\begin{tcolorbox}[title=Pourquoi 3.10+~?]
+\begin{itemize}[leftmargin=*]
+  \item LangChain~1.x requiert Python 3.10 minimum.
+  \item \texttt{match}/\texttt{case} (PEP 634) est utile en Phase 3.
+  \item Les annotations modernes (\texttt{X | None} au lieu de
+        \texttt{Optional[X]}) marchent partout.
+\end{itemize}
+\textbf{Recommandation}~: 3.12 est le bon défaut en 2026.
+\end{tcolorbox}
+
+% #####################################################################
+\section{Installer PyCharm}
+% #####################################################################
+
+PyCharm Community Edition est gratuit et largement suffisant pour ce
+cours~: pas besoin de la version Pro.
+
+\subsection{Téléchargement}
+
+\begin{enumerate}[leftmargin=*]
+  \item Va sur
+        \href{https://www.jetbrains.com/pycharm/download/}{jetbrains.com/pycharm/download}.
+  \item Choisis \textbf{PyCharm Community} (et pas Professional).
+  \item Lance l'installeur et suis les étapes par défaut.
+\end{enumerate}
+
+\subsection{Configuration de l'interpréteur Python}
+
+À la première ouverture, PyCharm te demande quel interpréteur
+utiliser. Tu peux~:
+
+\begin{enumerate}[leftmargin=*]
+  \item Pointer vers ton Python système (rapide, mais pollue tes
+        installations Python).
+  \item \textbf{Recommandé}~: créer un \emph{virtualenv} dédié au
+        projet (voir Section~\ref{sec:venv}).
+\end{enumerate}
+
+\begin{quote}\itshape
+\textbf{Astuce.} Si tu préfères travailler dans un terminal pur
+(VS~Code, Neovim, terminal système\dots), tu peux. PyCharm est
+recommandé mais pas obligatoire. Les commandes du cours sont
+toujours données en ligne de commande.
+\end{quote}
+
+% #####################################################################
+\section{Récupérer le projet}
+% #####################################################################
+
+\begin{bashcode}
+git clone <URL-du-repo>
+cd pytutor
+\end{bashcode}
+
+Si tu n'utilises pas git, télécharge le projet sous forme de
+\texttt{.zip} et décompresse-le. À ce stade, ton dossier ressemble
+à~:
+
+\begin{bashcode}
+pytutor/
+  config.py
+  phase1_explain.py
+  phase2_rag.py
+  phase3_agent.py
+  phase1-solutions.py
+  phase2-solutions.py
+  phase3-solutions.py
+  requirements.txt
+  .env.example          # à copier en .env
+  Latex/                # les documents PDF du cours
+\end{bashcode}
+
+% #####################################################################
+\section{Créer un environnement virtuel}
+\label{sec:venv}
+% #####################################################################
+
+Un \emph{venv} isole les dépendances du projet du reste de ta
+machine. C'est obligatoire en pratique pour ne pas casser ton
+système Python.
+
+\subsection{Création}
+
+\begin{bashcode}
+cd pytutor
+python3 -m venv .venv
+\end{bashcode}
+
+Un dossier \texttt{.venv/} apparaît. Active-le~:
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{macOS / Linux}~:
+\begin{bashcode}
+source .venv/bin/activate
+\end{bashcode}
+  \item \textbf{Windows (PowerShell)}~:
+\begin{bashcode}
+.venv\Scripts\Activate.ps1
+\end{bashcode}
+  \item \textbf{Windows (cmd.exe)}~:
+\begin{bashcode}
+.venv\Scripts\activate.bat
+\end{bashcode}
+\end{itemize}
+
+Une fois activé, ton prompt commence par \texttt{(.venv)}. Tape
+\texttt{python --version} pour vérifier que c'est bien le Python du
+venv qui répond.
+
+\subsection{Brancher PyCharm sur le venv}
+
+\textit{File} $\to$ \textit{Settings} (ou
+\textit{PyCharm}~$\to$~\textit{Preferences} sur macOS)
+$\to$ \textit{Project: pytutor} $\to$ \textit{Python Interpreter}
+$\to$ \textit{Add Interpreter} $\to$ \textit{Existing} $\to$
+sélectionner \texttt{pytutor/.venv/bin/python} (ou
+\texttt{.venv\textbackslash{}Scripts\textbackslash{}python.exe}
+sur Windows).
+
+% #####################################################################
+\section{Installer les dépendances~: \texttt{requirements.txt}}
+% #####################################################################
+
+Le fichier \texttt{requirements.txt} liste tout ce dont le projet a
+besoin~:
+
+\begin{bashcode}
+# --- LangChain core (Phase 1, 2 et 3) ---
+# Note : LangChain 1.0 (oct. 2025) a refactorisé l'écosystème.
+# Le méta-package `langchain` est désormais slim ; les anciennes classes
+# `langchain.retrievers.*`, `langchain.chains.*`, etc., sont dans `langchain-classic`.
+langchain>=1.0
+langchain-classic>=1.0  # MultiQueryRetriever, ContextualCompressionRetriever, ...
+langchain-anthropic>=1.0
+langgraph>=1.0
+
+# --- Vector store local (Phase 2) ---
+langchain-chroma>=0.1.4
+chromadb>=0.5
+
+# --- Embeddings locaux, gratuits, sans clé API supplémentaire (Phase 2) ---
+# (~500 Mo à l'installation à cause de torch, mais ça reste local après)
+langchain-huggingface>=0.1
+sentence-transformers>=3.0
+
+# --- Chargement de documents web (Phase 2) : requests + BeautifulSoup ---
+# Remplace WebBaseLoader de langchain-community (sunset en LangChain 1.x).
+requests>=2.31
+beautifulsoup4>=4.12
+lxml>=5.0
+
+# --- Utilitaires ---
+python-dotenv>=1.0
+pydantic>=2.0
+pycodestyle>=2.12   # utilisé par le tool check_pep8 de la Phase 3
+\end{bashcode}
+
+Installe-les avec~:
+
+\begin{bashcode}
+pip install --upgrade pip
+pip install -r requirements.txt
+\end{bashcode}
+
+\begin{tcolorbox}[title=Combien de temps~? Combien de Mo~?]
+\begin{itemize}[leftmargin=*]
+  \item Premier \texttt{pip install}~: \textbf{5 à 10 minutes} selon
+        ta connexion. La plus grosse partie est \texttt{torch} et
+        \texttt{sentence-transformers} (\(\sim\)500~Mo).
+  \item Les lancements suivants utilisent le cache pip~: instantané.
+  \item Le venv complet pèse autour de \textbf{1.5~Go}. C'est
+        normal pour un environnement ML.
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Pourquoi ces paquets~?}
+
+\begin{center}
+\begin{tabular}{p{5cm} p{10.5cm}}
+\toprule
+\textbf{Paquet} & \textbf{À quoi ça sert} \\
+\midrule
+\texttt{langchain}              & Cœur du framework~: \texttt{Runnable},
+                                  \texttt{ChatPromptTemplate}, parsers. \\
+\texttt{langchain-classic}      & Ancienne API conservée pour quelques
+                                  retrievers (ex.~\texttt{MultiQueryRetriever}). \\
+\texttt{langchain-anthropic}    & Wrapper officiel pour Claude. \\
+\texttt{langgraph}              & Construire des agents avec une boucle
+                                  \texttt{Réfléchir-Agir-Observer}. \\
+\texttt{langchain-chroma}       & Intégration Chroma pour LangChain. \\
+\texttt{chromadb}               & Base vectorielle locale, persistée sur
+                                  disque. \\
+\texttt{langchain-huggingface}  & Wrapper pour les embeddings HuggingFace. \\
+\texttt{sentence-transformers}  & Modèle d'embeddings (encode les textes
+                                  en vecteurs, \emph{local}, gratuit). \\
+\texttt{requests, bs4, lxml}    & Aspirer des pages web pour l'indexation. \\
+\texttt{python-dotenv}          & Charger \texttt{.env} automatiquement. \\
+\texttt{pydantic}               & Schémas typés (sortie structurée). \\
+\texttt{pycodestyle}            & Outil PEP~8 utilisé en Phase 3. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% #####################################################################
+\section{Configurer les clés API~: \texttt{.env}}
+% #####################################################################
+
+Deux services en ligne sont utilisés~:
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Anthropic} (Claude) — \emph{obligatoire}. Le modèle
+        LLM qui répond à toutes tes requêtes.
+  \item \textbf{LangSmith} — \emph{fortement recommandé}. Une UI
+        web qui trace chaque appel LLM. Indispensable pour
+        comprendre ce que LangChain fait \emph{vraiment}.
+\end{itemize}
+
+\subsection{Obtenir les clés}
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Anthropic}~: crée un compte sur
+        \href{https://console.anthropic.com}{console.anthropic.com},
+        va dans \textit{API keys}, et crée une clé qui commence par
+        \texttt{sk-ant-api03-\dots}.
+  \item \textbf{LangSmith}~: crée un compte gratuit sur
+        \href{https://smith.langchain.com}{smith.langchain.com},
+        va dans \textit{Settings} $\to$ \textit{API Keys}, et crée
+        une clé qui commence par \texttt{lsv2\_pt\_\dots}.
+\end{enumerate}
+
+\begin{tcolorbox}[title=Avertissement crédits / coûts]
+\begin{itemize}[leftmargin=*]
+  \item L'API Anthropic est \textbf{payante} mais Claude Haiku est
+        très bon marché. Tu peux suivre tout le cours pour quelques
+        dollars de crédits.
+  \item LangSmith offre une \textbf{enveloppe gratuite} largement
+        suffisante pour un usage pédagogique.
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Créer le fichier \texttt{.env}}
+
+Crée un fichier nommé \texttt{.env} à la racine du projet~:
+
+\begin{envcode}
+# --- Anthropic (Claude) — OBLIGATOIRE ---
+ANTHROPIC_API_KEY=sk-ant-api03-XXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+# --- LangSmith (fortement recommandé) ---
+# Crée un compte gratuit sur https://smith.langchain.com
+# Tu verras chaque appel, chaque token, chaque décision d'agent
+# dans une UI web. C'est le meilleur outil de debug.
+LANGSMITH_TRACING=true
+# LANGSMITH_ENDPOINT non défini -> US par défaut (smith.langchain.com)
+# Pour l'EU, mets : LANGSMITH_ENDPOINT=https://eu.api.smith.langchain.com
+#                   + une clé créée sur eu.smith.langchain.com
+LANGSMITH_API_KEY=lsv2_pt_XXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+LANGSMITH_PROJECT=PyTutor2
+
+# Désactive le parallélisme des tokenizers HuggingFace pour éviter
+# les warnings bruyants en CLI.
+TOKENIZERS_PARALLELISM=false
+\end{envcode}
+
+\begin{tcolorbox}[title=Sécurité — Ne JAMAIS commiter \texttt{.env}]
+\begin{itemize}[leftmargin=*]
+  \item Le \texttt{.env} contient des clés en clair~: il doit rester
+        \textbf{strictement local}.
+  \item Vérifie que ton \texttt{.gitignore} contient bien la ligne
+        \texttt{.env}.
+  \item Si tu commit une clé par erreur, \textbf{révoque-la
+        immédiatement} depuis la console Anthropic~/~LangSmith et
+        régénère-en une nouvelle.
+\end{itemize}
+\end{tcolorbox}
+
+% #####################################################################
+\section{La configuration centrale~: \texttt{config.py}}
+% #####################################################################
+
+Toutes les phases du cours importent leur modèle depuis un unique
+fichier \texttt{config.py}. Ça garantit qu'un changement de modèle
+(par exemple Haiku $\to$ Sonnet) se propage à tout le projet
+\emph{sans} chercher tous les fichiers.
+
+\begin{pythoncode}
+"""Configuration centrale du projet PyTutor.
+
+Toutes les phases importent depuis ce module pour rester cohérent.
+"""
+from __future__ import annotations
+
+import os
+from dotenv import load_dotenv
+from langchain_anthropic import ChatAnthropic
+
+# Charge automatiquement les variables du .env dès l'import
+load_dotenv()
+
+# --- Choix du modèle ---
+# Haiku  = rapide et économique, parfait pour itérer toute la journée.
+# Sonnet = plus intelligent, à activer quand tu veux comparer la qualité.
+HAIKU  = "claude-haiku-4-5-20251001"
+SONNET = "claude-sonnet-4-6"
+
+DEFAULT_MODEL = HAIKU
+
+
+def get_model(
+    model_name: str = DEFAULT_MODEL,
+    temperature: float = 0.0,
+    max_tokens: int = 2048,
+) -> ChatAnthropic:
+    """Renvoie une instance configurée de ChatAnthropic.
+
+    Lève une erreur claire si la clé API n'est pas trouvée.
+    """
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        raise RuntimeError(
+            "ANTHROPIC_API_KEY introuvable. "
+            "As-tu créé un fichier .env à partir de .env.example ?"
+        )
+    return ChatAnthropic(
+        model=model_name,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+\end{pythoncode}
+
+\subsection{Trois choses à retenir}
+
+\begin{enumerate}[leftmargin=*]
+  \item \texttt{load\_dotenv()} charge \texttt{.env} dès l'import. Tu
+        n'as plus besoin de la rappeler ailleurs.
+  \item \texttt{get\_model()} est le \textbf{point d'entrée unique}
+        pour obtenir un modèle. Tous les exercices font
+        \texttt{from config import get\_model}.
+  \item Pour passer en \emph{Sonnet} le temps d'un test~:
+        \texttt{get\_model(SONNET)}. Pour augmenter la créativité~:
+        \texttt{get\_model(temperature=0.7)}. Tout reste local à ton
+        appel.
+\end{enumerate}
+
+% #####################################################################
+\section{Premier test — \emph{Hello, Claude}}
+% #####################################################################
+
+À ce stade, tu as~: Python, PyCharm, le venv activé, les dépendances
+installées, le \texttt{.env} rempli, et \texttt{config.py} en place.
+Crée un fichier \texttt{test\_hello.py} à la racine du projet avec
+le contenu ci-dessous. C'est un mini-aperçu de \emph{LCEL}~: on
+compose trois briques (\texttt{prompt}, \texttt{model},
+\texttt{parser}) avec l'opérateur \texttt{|}, puis on
+\texttt{.invoke} la chaîne avec un dict d'entrée.
+
+\begin{pythoncode}
+"""test_hello.py — valide l'installation et donne un avant-goût LCEL."""
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+
+from config import get_model
+
+# 1. Définir le gabarit de prompt
+prompt = ChatPromptTemplate.from_template(
+    "Raconte-moi une blague courte sur le thème : {sujet}"
+)
+# 2. Initialiser le modèle (nécessite la clé API)
+model = get_model()
+# 3. Créer le parser de sortie
+parser = StrOutputParser()
+# 4. Assembler la chaîne (LCEL)
+chain = prompt | model | parser
+# 5. Exécuter la chaîne
+reponse = chain.invoke({"sujet": "Cours de mathématiques"})
+print(reponse)
+\end{pythoncode}
+
+Lance-le~:
+
+\begin{bashcode}
+python test_hello.py
+\end{bashcode}
+
+Si tu vois une blague s'afficher, félicitations~: ton setup est
+valide.
+
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+# Une blague de maths
+
+Un professeur de mathématiques demande à son élève :
+
+-- Pourquoi tu n'as pas fait tes devoirs ?
+
+-- Parce que j'ai essayé de résoudre une équation du second degré,
+   mais j'ai perdu le discriminant en chemin !
+
+-- Comment on perd un discriminant ?
+
+-- Ben, c'était un Delta, alors il a dû s'envoler !
+\end{verbatim}
+\end{tcolorbox}
+
+\begin{quote}\itshape
+\textbf{Note.} La sortie change à chaque appel (le modèle est non
+déterministe). Avec \texttt{temperature=0} (le défaut dans
+\texttt{config.py}), tu obtiendras des réponses très similaires
+d'une exécution à l'autre, mais rarement identiques au caractère
+près.
+\end{quote}
+
+\subsection{Que faire si ça plante~?}
+
+\begin{center}
+\begin{tabular}{p{5cm} p{10.5cm}}
+\toprule
+\textbf{Erreur} & \textbf{Cause probable} \\
+\midrule
+\texttt{ANTHROPIC\_API\_KEY introuvable} &
+   Tu n'as pas créé le \texttt{.env}, ou il n'est pas à la racine du
+   projet. \\[1mm]
+\texttt{ModuleNotFoundError: langchain} &
+   Le venv n'est pas activé, ou tu as oublié
+   \texttt{pip install -r requirements.txt}. \\[1mm]
+\texttt{401 Unauthorized} (Anthropic) &
+   Clé invalide ou expirée. Régénère-en une dans la console. \\[1mm]
+\texttt{429 Too Many Requests} &
+   Tu as épuisé tes crédits ou tu cognes le rate limit. Vérifie ton
+   compte Anthropic. \\[1mm]
+Compilation très lente &
+   Premier lancement~: \texttt{sentence-transformers} télécharge
+   un modèle (\(\sim\)90~Mo). C'est normal, attends. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% #####################################################################
+\section{Activer LangSmith (recommandé)}
+% #####################################################################
+
+Si tu as bien rempli \texttt{LANGSMITH\_API\_KEY} dans \texttt{.env},
+chaque appel LLM est désormais tracé sur
+\href{https://smith.langchain.com}{smith.langchain.com}, dans le
+projet \texttt{PyTutor2}.
+
+\begin{itemize}[leftmargin=*]
+  \item Va sur l'UI, ouvre le projet \texttt{PyTutor2}.
+  \item Tu vois la liste des derniers \emph{runs}.
+  \item Clique sur un run pour voir~: l'arbre d'exécution, le prompt
+        \emph{exactement} envoyé au modèle, les tokens, la latence,
+        le coût.
+\end{itemize}
+
+\begin{tcolorbox}[title=LangSmith change la donne]
+Sans LangSmith, déboguer une chaîne LangChain c'est ajouter des
+\texttt{print} partout puis essayer de reconstituer ce qui s'est
+passé. Avec LangSmith, l'arbre d'exécution est directement
+visualisé. \textbf{Active-le maintenant}, tu gagneras des heures sur
+toutes les phases qui viennent.
+\end{tcolorbox}
+
+% #####################################################################
+\section*{Récapitulatif}
+% #####################################################################
+
+\addcontentsline{toc}{section}{Récapitulatif}
+
+{\itshape\sloppy
+\textit{Ce qu'il faut retenir pour démarrer~:}
+\begin{enumerate}[leftmargin=*]
+  \item Python 3.10+ obligatoire (3.12 recommandé).
+  \item PyCharm Community suffit (ou n'importe quel autre IDE).
+  \item Toujours travailler dans un \texttt{venv} dédié.
+  \item \texttt{pip install -r requirements.txt} une seule fois.
+  \item Créer un \texttt{.env} avec les clés Anthropic et LangSmith.
+  \item Toutes les phases importent \texttt{get\_model()} depuis
+        \texttt{config.py}~: changer de modèle se fait en une ligne.
+  \item Lancer \texttt{python phase1\_explain.py} pour valider le
+        setup avant d'attaquer la Phase 1.
+\end{enumerate}
+\par}
+
+\bigskip
+
+\begin{tcolorbox}[colback=green!4, colframe=green!50!black,
+                  title=Prêt~? Direction la Phase 1]
+Dans la \textbf{Phase 1}, on entre dans le vif du sujet~:
+\texttt{ChatPromptTemplate}, sortie structurée Pydantic,
+composition LCEL avec \texttt{|}, \texttt{RunnableParallel}, et
+streaming. C'est le socle de tout le reste du cours.
+\end{tcolorbox}
+
+\end{document}

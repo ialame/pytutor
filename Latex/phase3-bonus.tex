@@ -291,6 +291,71 @@ la question (par exemple, ajouter « pattern matching, match, case »
 parmi les cas d'usage).
 \end{quote}
 
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 1 -- Ajout d'un tool current_python_version()
+======================================================================
+
+[USER]:
+  Quelle version de Python utilises-tu pour exécuter mon code ?
+  Est-ce que je peux utiliser le pattern matching avec
+  `match` / `case` ?
+
+[AI]:
+  Je vais vérifier la version de Python utilisée.
+  -> tool_use: current_python_version({})
+
+[TOOL current_python_version]:
+     Python 3.12.7 (darwin)
+
+[AI]:
+  Excellente nouvelle !
+
+  Je utilise **Python 3.12.7**, ce qui signifie que **oui, tu peux
+  tout à fait utiliser le pattern matching avec `match` / `case`** !
+
+  Le pattern matching a été introduit en **Python 3.10**, donc tu as
+  accès à cette fonctionnalité. Voici un petit exemple pour te
+  montrer que ça fonctionne :
+
+  -> tool_use: run_python_code({'code':
+       'def classifier_nombre(n):\n'
+       '    match n:\n'
+       '        case 0: return "zéro"\n'
+       '        case 1: return "un"\n'
+       '        case 2: return "deux"\n'
+       '        case _: return "autre nombre"\n'
+       'print(classifier_nombre(0))\n'
+       'print(classifier_nombre(1))\n'
+       'print(classifier_nombre(5))'})
+
+[TOOL run_python_code]:
+     STDOUT:
+     zéro
+     un
+     autre nombre
+     Exit code: 0
+
+[AI]:
+  Parfait ! Comme tu vois, le pattern matching fonctionne sans
+  problème. Tu peux utiliser :
+   - Les **patterns simples** (valeurs littérales)
+   - Les **patterns structurels** (tuples, listes, dictionnaires)
+   - Les **patterns avec gardes** (conditions supplémentaires
+     avec `if`)
+   - Le **wildcard** `_` pour capturer n'importe quoi
+\end{verbatim}
+\end{tcolorbox}
+
 \subsection{Vérification dans LangSmith}
 
 L'arbre d'exécution doit montrer~:
@@ -737,6 +802,98 @@ que le modèle, soit override systématiquement (overshoot), soit ne
 l'override jamais (timeout au cas 2).
 \end{quote}
 
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 3 -- Tool avec paramètre timeout_seconds configurable
+======================================================================
+
+--- Cas 1 : code rapide (timeout par défaut attendu) ---
+
+[USER]:
+  Exécute ce code pour me dire la sortie :
+  ```python
+  print(sum(range(100)))
+  ```
+
+[AI]:
+  -> tool_use: run_python_code_v2({'code':
+                                    'print(sum(range(100)))'})
+       (pas de timeout_seconds -> défaut 5s)
+
+[TOOL run_python_code_v2]:
+     STDOUT:
+     4950
+     Exit code: 0 (timeout utilisé: 5s)
+
+[AI]:
+  La sortie est **4950**.
+
+  Ce code calcule la somme de tous les nombres de 0 à 99 (car
+  `range(100)` génère les entiers de 0 à 99 inclus).
+  Mathématiquement, c'est : 0 + 1 + 2 + ... + 99 = **4950**.
+
+
+--- Cas 2 : calcul long, l'agent doit augmenter le timeout ---
+
+[USER]:
+  J'ai écrit un code qui calcule la somme des nombres premiers
+  jusqu'à 5 millions. Ca met une bonne dizaine de secondes à tourner
+  sur ma machine. Tu peux l'exécuter pour vérifier le résultat ?
+
+  ```python
+  def is_prime(n):
+      if n < 2: return False
+      for i in range(2, int(n**0.5)+1):
+          if n % i == 0: return False
+      return True
+
+  total = sum(n for n in range(2, 5_000_000) if is_prime(n))
+  print(total)
+  ```
+
+[AI]:
+  Je vais exécuter ton code. Comme tu l'as mentionné, ça va prendre
+  un peu de temps, donc je vais augmenter le délai d'exécution.
+  -> tool_use: run_python_code_v2({
+       'code': '...',
+       'timeout_seconds': 30   <-- augmenté explicitement
+     })
+
+[TOOL run_python_code_v2]:
+     STDOUT:
+     838596693108
+     Exit code: 0 (timeout utilisé: 30s)
+
+[AI]:
+  Parfait ! Ton code fonctionne correctement et donne le résultat :
+  **838 596 693 108**
+
+  Ton algorithme est correct, mais je peux te montrer comment
+  l'optimiser significativement avec le **Crible d'Eratosthène**,
+  qui trouve tous les nombres premiers jusqu'à une limite en une
+  seule passe (probablement 10-20x plus rapide).
+
+----------------------------------------------------------------------
+OBSERVATIONS :
+ - Au cas 1, l'agent appelle le tool SANS spécifier timeout_seconds
+   (il garde la valeur par défaut 5s).
+ - Au cas 2, l'agent voit dans ta question que le code prend ~10s,
+   et passe explicitement timeout_seconds=30 (ou similaire).
+ - C'est UNE preuve que la docstring conditionne le comportement :
+   la phrase 'Augmente cette valeur SEULEMENT si...' est lue et
+   appliquée par le modèle.
+\end{verbatim}
+\end{tcolorbox}
+
 \subsection{Vérification dans LangSmith}
 
 Dans la trace, examine l'onglet \emph{Tool calls} du \texttt{AIMessage}
@@ -1005,6 +1162,104 @@ fréquents~:
         l'agent.
 \end{itemize}
 
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 4 -- Tool 'evaluate_student_answer' (sous-LLM caché)
+======================================================================
+
+[USER]:
+  Un élève a répondu à une question d'examen. Evalue-la pour moi et
+  formule un commentaire que je pourrais lui envoyer.
+
+  Question : A quoi sert le mot-clé `yield` en Python et en quoi
+  diffère-t-il de `return` ?
+
+  Réponse de l'élève : << `yield` permet de retourner plusieurs
+  valeurs depuis une fonction, contrairement à `return` qui n'en
+  retourne qu'une seule. >>
+
+[AI]:
+  Je vais évaluer cette réponse de manière objective.
+  -> tool_use: evaluate_student_answer({
+       'question': 'A quoi sert le mot-clé `yield`...',
+       'answer':   '`yield` permet de retourner...'
+     })
+
+[TOOL evaluate_student_answer]:
+     Correct : non
+     Note : 4/10
+     Concepts manquants :
+       - Générateurs et itérateurs
+       - Lazy evaluation (évaluation paresseuse)
+       - Sauvegarde de l'état d'exécution avec yield
+       - Efficacité mémoire des générateurs
+       - Différence entre retourner une liste et utiliser yield
+     Feedback : Tu as identifié une différence importa...
+
+[AI]:
+  ## Commentaire à envoyer à l'élève :
+
+  **Evaluation : 4/10**
+
+  Bonne intuition, mais ta réponse est **incomplète et imprécise**.
+  Voici ce qui manque :
+
+  ### Ce que tu as bien compris
+  Tu as raison que `yield` permet de retourner plusieurs valeurs, ce
+  qui est une différence avec `return`.
+
+  ### Ce qui manque
+  La vraie différence entre `yield` et `return` ne porte pas
+  seulement sur le **nombre** de valeurs, mais sur **comment** et
+  **quand** elles sont retournées :
+
+  1. **`yield` crée un générateur** : une fonction qui retourne les
+     valeurs **une à une, à la demande** (lazy evaluation), sans
+     tout calculer d'un coup.
+  2. **`return` retourne tout immédiatement** : la fonction s'arrête
+     et retourne une valeur unique (ou une liste si tu veux
+     plusieurs valeurs).
+  3. **Avantage mémoire** : avec `yield`, tu économises de la
+     mémoire car les valeurs ne sont générées que quand on les
+     demande.
+
+  ### Exemple pour clarifier
+  ```python
+  # Avec return : tout est calculé et stocké en mémoire
+  def nombres_return():
+      return [1, 2, 3, 4, 5]
+
+  # Avec yield : les valeurs sont générées à la demande
+  def nombres_yield():
+      yield 1; yield 2; yield 3; yield 4; yield 5
+  ```
+
+  **A revoir** : les concepts de **générateurs**, **itérateurs** et
+  **lazy evaluation** pour bien maîtriser `yield`.
+
+----------------------------------------------------------------------
+ARCHITECTURE EN COUCHES A VISUALISER :
+ 1. AGENT PRINCIPAL (Claude) : décide d'appeler evaluate_student_answer.
+ 2. TOOL evaluate_student_answer : Python exécute la fonction.
+ 3. SOUS-LLM (Claude à nouveau) : appelé en interne par la mini-chaîne.
+    Reçoit son propre prompt, renvoie un objet Pydantic structuré.
+ 4. Le tool reformate l'objet en string et le rend à l'agent.
+ 5. L'agent intègre le résultat et formule sa réponse à l'utilisateur.
+
+ -> 2 appels LLM dans ce tour, pour 1 invocation d'agent.
+ -> Si tu actives LangSmith, tu verras les 2 traces emboîtées.
+\end{verbatim}
+\end{tcolorbox}
+
 \subsection{Vérification dans LangSmith}
 
 L'arbre d'exécution montre les \textbf{traces emboîtées}~:
@@ -1272,6 +1527,56 @@ attend 8 secondes en boîte noire avant d'afficher la réponse complète
 est perçue comme cassée — même si la durée totale est identique au
 streaming.
 \end{quote}
+
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 5a -- Streaming par étapes (stream_mode='updates')
+======================================================================
+
+Question envoyée. Affichage des étapes au fil de l'eau :
+
+  [model] -> appel search_python_docs(['query'])
+  [model] -> appel generate_exercise(['topic', 'difficulty'])
+[OK] Rechargement de l'index depuis ./chroma_db
+  [tools] <- retour de search_python_docs: Source:
+            https://docs.python.org/3/glossary.html or the script
+            being run has fini...
+  [tools] <- retour de generate_exercise: Exercice sur 'itérables'
+            (niveau débutant) : Code de référence : # Exemple 1 :...
+  [model] [chat] ## Définition d'un itérable
+            D'après la **documentation officielle Python**, un
+            **itérable** est :
+            > Un objet capable ...
+
+======================================================================
+EXERCICE 5b -- Streaming token par token (stream_mode='messages')
+======================================================================
+
+Réponse qui s'affiche au fur et à mesure (effet machine à écrire) :
+
+  [... tokens consommés un par un, sortie typewriter ...]
+
+----------------------------------------------------------------------
+QUAND UTILISER QUEL MODE :
+ - 'updates'  : UI qui montre 'l'agent réfléchit / l'agent utilise X'.
+                Idéal pour les workflows long-running où
+                l'utilisateur attendrait sinon dans le vide.
+ - 'messages' : effet machine à écrire, comme ChatGPT et Claude.ai.
+                Indispensable pour une UX de chat moderne.
+ - On combine souvent les deux : on stream les tokens du texte
+   final, et on affiche des badges 'utilise tool X' pour les
+   étapes intermédiaires.
+\end{verbatim}
+\end{tcolorbox}
 
 \subsection{Vérification dans LangSmith}
 

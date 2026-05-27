@@ -329,12 +329,12 @@ async def exercise_5() -> None:
 
 def main() -> None:
     # Les 4 premiers exercices sont synchrones
-    # exercise_1()
-    # exercise_2()
-    # exercise_3()
+    exercise_1()
+    exercise_2()
+    exercise_3()
     exercise_4()
     # Le 5e est async, on l'enrobe dans asyncio.run
-    #asyncio.run(exercise_5())
+    asyncio.run(exercise_5())
 
     print("\n" + "=" * 70)
     print("✓ Tous les exercices de la Phase 1 sont résolus.")

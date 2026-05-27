@@ -24,11 +24,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import requests
+from bs4 import BeautifulSoup
+
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableParallel, RunnablePassthrough
-from langchain_community.document_loaders import WebBaseLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
@@ -57,6 +59,7 @@ PYTHON_DOCS_URLS = [
 PERSIST_DIR = "./chroma_db"
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"  # 384 dim, rapide, multilingue
 COLLECTION_NAME = "python_docs"
+USER_AGENT = "PyTutor-Edu/0.1"
 
 
 # ============================================================================
@@ -65,6 +68,29 @@ COLLECTION_NAME = "python_docs"
 # Si la base existe déjà sur disque, on la recharge sans rien refaire.
 # Sinon on aspire les URL, on découpe, on encode, on persiste.
 # ============================================================================
+
+def load_web_pages(urls: list[str]) -> list[Document]:
+    """Télécharge chaque URL et renvoie un `Document` par page.
+
+    Remplace `langchain_community.document_loaders.WebBaseLoader` (sunset
+    en LangChain 1.x) par un équivalent minimal : `requests` pour la requête
+    HTTP, `BeautifulSoup` pour extraire le texte brut. C'est exactement ce
+    que faisait WebBaseLoader en interne.
+    """
+    docs: list[Document] = []
+    headers = {"User-Agent": USER_AGENT}
+    for url in urls:
+        response = requests.get(url, headers=headers, timeout=30)
+        response.raise_for_status()
+        # On passe les bytes bruts (response.content) plutôt que response.text :
+        # requests devine parfois mal l'encoding à partir des headers HTTP
+        # (Latin-1 par défaut pour HTML), alors que BeautifulSoup détecte
+        # correctement l'UTF-8 à partir du <meta charset> de la page.
+        soup = BeautifulSoup(response.content, "lxml")
+        text = soup.get_text(separator="\n", strip=True)
+        docs.append(Document(page_content=text, metadata={"source": url}))
+    return docs
+
 
 def get_embeddings() -> HuggingFaceEmbeddings:
     """Singleton de fait : un seul modèle d'embeddings réutilisé partout."""
@@ -90,11 +116,8 @@ def build_or_load_vectorstore(force_rebuild: bool = False) -> Chroma:
 
     print(f"→ Indexation de {len(PYTHON_DOCS_URLS)} pages de docs.python.org...")
 
-    # --- Chargement : WebBaseLoader gère une ou plusieurs URL ---
-    # Chaque page devient UN document, avec son URL en metadata.
-    loader = WebBaseLoader(PYTHON_DOCS_URLS)
-    loader.requests_kwargs = {"headers": {"User-Agent": "PyTutor-Edu/0.1"}}
-    raw_docs = loader.load()
+    # --- Chargement : une page = un Document, URL en metadata. ---
+    raw_docs = load_web_pages(PYTHON_DOCS_URLS)
     print(f"  {len(raw_docs)} pages chargées")
 
     # --- Découpage en chunks ---

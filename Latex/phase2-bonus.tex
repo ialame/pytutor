@@ -299,6 +299,93 @@ Réindexer prend du temps. En persistant dans des dossiers séparés
   \item Faire le test une fois, l'oublier.
 \end{itemize}
 
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 1 -- Impact du chunk_size sur la qualité du RAG
+======================================================================
+
+--- chunk_size = 500 ---
+  -> Indexation chunk_size=500 dans ./chroma_db_500...
+    -> 658 chunks générés
+  Longueur moyenne des chunks retrouvés : 472 caractères
+  [1] ) # arguments stored in .args ... print ( inst ) # __str__
+      allows args to be pri...
+  [2] >>> try : ... raise TypeError ( 'bad type' ) ... except
+      Exception as e : ... e ....
+  [3] know where to look in case the input came from a file. 8.2.
+      Exceptions   Even if...
+
+  Réponse :
+  # Lever une exception personnalisée en Python
+
+  D'après le contexte fourni, je peux te montrer comment lever une
+  exception en utilisant le mot-clé `raise` [2].
+
+  ## Syntaxe de base
+
+  ```python
+  raise TypeException('message')
+  ```
+  ...
+
+--- chunk_size = 1000 ---
+  -> Indexation chunk_size=1000 dans ./chroma_db_1000...
+    -> 327 chunks générés
+  Longueur moyenne des chunks retrouvés : 981 caractères
+  [1] except Exception as inst : ... print ( type ( inst )) # the
+      exception type ... p...
+  [2] They include SystemExit which is raised by sys.exit() and
+      KeyboardInterrupt whic...
+  [3] err =} , { type ( err ) =} " ) raise The try ... except
+      statement has an optional ...
+
+  Réponse :
+  Je dois être honnête : **la réponse à ta question n'est pas
+  présente dans le contexte fourni.**
+
+  Le contexte [1], [2] et [3] explique comment :
+  - **Capturer** des exceptions avec `try...except`
+  - **Accéder** aux informations d'une exception
+  - **Re-lever** une exception avec...
+
+--- chunk_size = 2000 ---
+  -> Indexation chunk_size=2000 dans ./chroma_db_2000...
+    -> 165 chunks générés
+  Longueur moyenne des chunks retrouvés : 1977 caractères
+  [1] ( inst . args ) # arguments stored in .args ... print ( inst )
+      # __str__ allows ...
+  [2] # shorthand for 'raise ValueError()' If you need to determine
+      whether an excepti...
+  [3] +-+---------------- 1 ---------------- | OSError: error 1
+      +---------------- 2 --...
+
+  Réponse :
+  # Comment lever une exception personnalisée en Python ?
+
+  D'après le contexte fourni, je peux te montrer comment lever une
+  exception en Python, mais la documentation ne couvre pas
+  explicitement la création d'exceptions personnalisées.
+  ...
+
+----------------------------------------------------------------------
+OBSERVATIONS A RETENIR :
+ - chunk=500  : chunks précis mais souvent incomplets, le modèle
+   peut manquer le contexte autour du détail recherché.
+ - chunk=1000 : le bon défaut pour de la doc technique.
+ - chunk=2000 : beaucoup de bruit, le retriever distingue mal
+   les passages pertinents des passages tangentiels.
+\end{verbatim}
+\end{tcolorbox}
+
 \subsection{Vérification dans LangSmith}
 
 Pour chaque \texttt{chunk\_size}, lance la même question et compare les
@@ -496,6 +583,78 @@ gr.Interface(
 
 Dans tous les cas, la chaîne RAG reste un \texttt{Runnable} inchangé~:
 on remplace juste l'interface utilisateur autour.
+
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 2 -- Mode interactif (Ctrl+C ou ligne vide pour quitter)
+======================================================================
+[OK] Rechargement de l'index depuis ./chroma_db
+
+PyTutor est prêt. Pose une question sur Python.
+
+> c'est quoi les fonctions décorées?
+
+----------------------------------------------------------------------
+# Les fonctions décorées
+
+Une **fonction décorée** est une fonction qui a été transformée par
+un **décorateur**. [1]
+
+## Qu'est-ce qu'un décorateur ?
+
+Un décorateur est une fonction qui retourne une autre fonction. Il
+est généralement appliqué comme une transformation de fonction en
+utilisant la syntaxe `@nom_du_decorateur`. [1]
+
+## Exemple simple
+
+Voici deux façons équivalentes de décorer une fonction : [1]
+
+**Syntaxe avec `@` (sucre syntaxique):**
+```python
+@staticmethod
+def f(arg):
+    ...
+```
+
+**Syntaxe sans `@` (équivalent):**
+```python
+def f(arg):
+    ...
+f = staticmethod(f)
+```
+
+Les deux approches font exactement la même chose : elles appliquent
+le décorateur `staticmethod` à la fonction `f`.
+
+## Exemples courants
+
+Les décorateurs les plus courants en Python sont : [1]
+- `@classmethod`
+- `@staticmethod`
+
+Ces décorateurs modifient le comportement de la fonction en la
+transformant.
+----------------------------------------------------------------------
+Sources :
+  [1] glossary.html
+  [2] errors.html
+  [3] controlflow.html
+  [4] errors.html
+
+>
+Au revoir.
+\end{verbatim}
+\end{tcolorbox}
 
 \subsection{Vérification dans LangSmith}
 
@@ -704,6 +863,77 @@ réponse est sourcée ou inventée. Toute architecture RAG sérieuse force
 le refus.
 \end{quote}
 
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 3 -- Prompt strict vs prompt par défaut
+======================================================================
+[OK] Rechargement de l'index depuis ./chroma_db
+
+Question (HORS contexte) : Comment installer le package `requests`
+                            avec pip ?
+
+--- Prompt PAR DEFAUT ---
+Je ne peux pas répondre à cette question en m'appuyant sur le
+contexte fourni.
+
+Le contexte contient des informations sur le glossaire Python, le
+chemin de recherche des modules (`sys.path`), les objets de type
+chemin (`path-like object`), et les packages Python, mais il ne
+contient aucune information sur l'installation de packages avec pip.
+
+Pour répondre à ta question sur l'installation de `requests` avec
+pip, il faudrait un contexte qui traite de la gestion des packages
+et de l'outil pip, ce qui n'est pas disponible ici.
+
+--- Prompt STRICT ---
+Cette information n'est pas dans la documentation fournie.
+
+Le contexte fourni traite de concepts comme les modules Python, le
+chemin de recherche des modules (`sys.path`), les packages et les
+PEPs, mais il ne contient aucune information sur l'installation de
+packages avec pip.
+
+
+Question (DANS contexte, contrôle) : Qu'est-ce qu'un itérable en
+                                      Python ?
+
+--- Prompt STRICT ---
+Selon la documentation fournie [2], un **itérable** est :
+
+> Un objet capable de retourner ses membres un à un.
+
+Les exemples d'itérables incluent :
+- Tous les types de séquences (comme `list`, `str`, et `tuple`)
+- Certains types non-séquences comme `dict` et les objets fichier
+- Les objets de classes que vous définissez avec une méthode
+  `__iter__()` ou une méthode `__getitem__()` qui implémente la
+  sémantique de séquence
+
+Les itérables peuvent être utilisés dans une boucle `for` et dans
+de nombreux autres contextes où une séquence est nécessaire
+(`zip()`, `map()`, etc.). Quand un objet itérable est passé à la
+fonction intégrée `iter()`, elle retourne un itérateur pour cet
+objet [2].
+
+----------------------------------------------------------------------
+OBSERVATIONS A RETENIR :
+ - Sans contrainte explicite, le modèle a tendance à 'aider' en
+   complétant avec ses connaissances. C'est utile en chat général,
+   c'est un BUG en RAG.
+ - Le prompt strict rend le refus net et exploitable en aval
+   (tu peux router vers une autre source d'info, par exemple).
+\end{verbatim}
+\end{tcolorbox}
+
 \subsection{Vérification dans LangSmith}
 
 Lance la même question hors-contexte avec les deux prompts. Dans
@@ -902,6 +1132,53 @@ LangSmith devient la principale source de vérité dès qu'on travaille
 sur une chaîne sérieuse. Les \texttt{print} restent utiles pour le
 local quick-and-dirty, mais la moindre investigation passe par l'UI.
 \end{quote}
+
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 4 -- Tracer une exécution dans LangSmith
+======================================================================
+
+LANGSMITH_TRACING : [OK] activé
+LANGSMITH_API_KEY : [OK] présente
+LANGSMITH_PROJECT : PyTutor2
+
+Exécution d'une chaîne RAG (la trace sera envoyée à LangSmith)...
+[OK] Rechargement de l'index depuis ./chroma_db
+
+Réponse :
+# Comment écrire un générateur infini en Python ?
+
+Je dois te dire que **la réponse à cette question n'est pas
+présente dans le contexte fourni**.
+
+Le contexte explique comment fonctionnent les générateurs en
+général [3,4] : ce sont des fonctions qui utilisent `yield` pour
+retourner des valeurs une...
+
+----------------------------------------------------------------------
+CE QU'IL FAUT REGARDER DANS L'UI :
+  1. Va sur https://smith.langchain.com et ouvre le projet 'PyTutor2'
+  2. Tu vois ta dernière trace. Clique dessus.
+  3. Le panneau de gauche montre l'arbre d'exécution :
+     - le RunnableParallel 'context' + 'question' (les 2 branches
+       partent en parallèle)
+     - puis le format_docs (RunnableLambda)
+     - puis le prompt formatté (regarde le texte exact envoyé)
+     - puis l'appel au modèle (avec coût et latence)
+     - puis le parser
+  4. Clique sur l'appel modèle pour voir les tokens consommés
+     et le prompt exact, sans rien deviner.
+\end{verbatim}
+\end{tcolorbox}
 
 \subsection{Vérification dans LangSmith}
 
@@ -1146,6 +1423,109 @@ pas été ramenés}. N'utilise pas MultiQuery si le problème est ailleurs
 (chunk\_size, prompt, modèle).
 \end{quote}
 
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+[OK] Rechargement de l'index depuis ./chroma_db
+
+Question (volontairement vague) : Comment marche l'héritage ?
+
+--- Retriever SIMPLE (k=3) ---
+  [1] 'UnicodeError', 'UnicodeTranslateError', 'UnicodeWarning',
+      'UserWarning', 'ValueError', 'Warning', '...
+  [2] |     raise ExceptionGroup('there were problems', excs) |
+      ExceptionGroup: there were problems (2 sub...
+  [3] definition.  (A class is never used as a global scope.)  While
+      one rarely encounters a good reason f...
+
+--- MultiQuery Retriever ---
+
+  11 documents au total (déduplication automatique)
+  [1] 4.9. More on Defining Functions 4.9.1. Default Argument Values
+      4.9.2. Keyword Arguments 4.9.3. Speci...
+  [2] Previous topic Enum HOWTO Next topic Logging HOWTO This page
+      Report a bug Improve this page Show sou...
+  [3] mixed numeric types are compared according to their numeric
+      value, so 0 equals 0.0, etc.  Otherwise,...
+  [4] . text encoding   A string in Python is a sequence of Unicode
+      code points (in range U+0000 - U+10FFF...
+  [5] Encoding and error handler used by Python to decode bytes from
+      the operating system and encode Unico...
+  [6] simply replace the base class method of the same name. There is
+      a simple way to call the base class ...
+  [7] There's nothing special about instantiation of derived classes:
+      DerivedClassName() creates a new ins...
+  [8] |     raise ExceptionGroup('there were problems', excs) |
+      ExceptionGroup: there were problems (2 sub...
+  [9] cycles so that the memory can be reclaimed. data race   A
+      situation where multiple threads access th...
+  [10] yield and a return statement is that on reaching a yield the
+       generator's state of execution is suspe...
+  [11] __iter__() method which returns an object with a __next__()
+       method.  If the class defines __next__()...
+
+--- REPONSE avec retriever simple ---
+# L'héritage en Python
+
+D'après le contexte fourni [3], voici comment fonctionne l'héritage :
+
+## Syntaxe de base
+
+Pour créer une classe qui hérite d'une autre, on utilise la syntaxe
+suivante :
+
+```python
+class DerivedClassName(BaseClassName):
+    <statement-1>
+    ...
+    <statement-N>
+```
+
+**Explication :**
+- `DerivedClassName` est la classe dérivée (la classe enfant)
+- `BaseClassName` est la cl...
+
+--- REPONSE avec MultiQuery ---
+# L'héritage en Python
+
+D'après la documentation fournie [6][7], voici comment fonctionne
+l'héritage :
+
+## Syntaxe de base
+
+Une classe dérivée hérite d'une ou plusieurs classes de base :
+
+```python
+class ClasseDerivee(ClasseBase):
+    <instruction-1>
+    ...
+    <instruction-N>
+```
+
+## Fonctionnement principal
+
+**Résolution des méthodes** [7] : Quand vous appelez une méthode,
+Python cherche l'attr...
+
+----------------------------------------------------------------------
+OBSERVATIONS A RETENIR :
+ - Regarde les logs ci-dessus pour voir les 3 reformulations
+   générées automatiquement par le LLM.
+ - MultiQuery double ou triple ton coût par question (1 appel pour
+   reformuler + N appels de recherche), mais améliore notablement
+   le recall sur les questions courtes ou floues.
+ - A ne PAS utiliser sur des questions très précises et bien
+   formulées : aucun gain, juste du coût en plus.
+\end{verbatim}
+\end{tcolorbox}
+
 \subsection{Vérification dans LangSmith}
 
 Avec MultiQuery, LangSmith trace un arbre plus profond~:
@@ -1371,6 +1751,68 @@ Le mini-classifieur LLM (avec \texttt{with\_structured\_output} +
 \texttt{Literal[\dots]} comme dans la Phase 1 / Exercice 4 bonus) décide
 \emph{dynamiquement} du filtre à appliquer. C'est l'analogue du
 \texttt{RunnableBranch} mais appliqué au retrieval.
+
+\begin{tcolorbox}[
+  colback=white,
+  colframe=black!50,
+  coltitle=black,
+  fonttitle=\footnotesize\bfseries,
+  fontupper=\footnotesize,
+  title=Sortie de l'exécution,
+  breakable,
+]
+\begin{verbatim}
+======================================================================
+EXERCICE 6 -- Filtrage par métadonnée (source URL)
+======================================================================
+[OK] Rechargement de l'index depuis ./chroma_db
+
+Question : Comment fonctionne `super()` ?
+
+--- SANS filtre (toutes les pages indexées) ---
+  [1] (modules.html) 'UnicodeError', 'UnicodeTranslateError',
+      'UnicodeWarning', 'UserWarning', 'Value...
+  [2] (modules.html) 'EOFError', 'Ellipsis', 'EnvironmentError',
+      'Exception', 'False', 'FileExistsErr...
+  [3] (modules.html) Function   The built-in function dir() is used
+      to find out which names a module ...
+  [4] (glossary.html) . single dispatch   A form of generic function
+      dispatch where the implementation...
+
+--- AVEC filtre source=classes.html ---
+  [1] (classes.html) definition.  (A class is never used as a global
+      scope.)  While one rarely encoun...
+  [2] (classes.html) call-next-method and is more powerful than the
+      super call found in single-inheri...
+  [3] (classes.html) __iter__() method which returns an object with
+      a __next__() method.  If the clas...
+  [4] (classes.html) # Function defined outside the class def f1 (
+      self , x , y ): return min ( x , x...
+
+
+Démo limite -- question hors-périmètre : Comment lever une exception ?
+
+--- AVEC filtre source=classes.html (mauvaise idée ici) ---
+  [1] (classes.html) 285 >>> xvec = [ 10 , 20 , 30 ] >>> yvec = [ 7 ,
+      5 , 3 ] >>> sum ( x * y for x ,...
+  [2] (classes.html) 9. Classes 9.1. A Word About Names and Objects
+      9.2. Python Scopes and Namespaces...
+  [3] (classes.html) Examples, recipes, and other code in the
+      documentation are additionally licensed...
+  [4] (classes.html) __iter__() method which returns an object with
+      a __next__() method.  If the clas...
+
+----------------------------------------------------------------------
+OBSERVATIONS A RETENIR :
+ - Le filtre par metadata est un couteau : utile quand tu SAIS
+   où chercher (ex: namespace, tag, langue, date), pénalisant
+   quand tu te trompes de domaine.
+ - Syntaxe Chroma : opérateurs $eq, $ne, $in, $gt, $gte, $lt,
+   $lte, $and, $or. Ex: {'source': {'$in': [url1, url2]}}.
+ - Pattern de prod : un mini-classifieur LLM en amont qui décide
+   du filtre à appliquer (auto-routing par metadata).
+\end{verbatim}
+\end{tcolorbox}
 
 \subsection{Vérification dans LangSmith}
 
