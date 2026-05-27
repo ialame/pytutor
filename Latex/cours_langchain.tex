@@ -1,0 +1,955 @@
+\documentclass[11pt,a4paper]{article}
+
+% --- Encodage et langue ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{lmodern}
+
+% --- Mise en page ---
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{parskip}
+\usepackage{enumitem}
+\setlist{itemsep=2pt, topsep=4pt}
+
+% --- Couleurs et code ---
+\usepackage{xcolor}
+\usepackage{booktabs}
+
+% --- Coloration syntaxique avec minted (Pygments) ---
+% IMPORTANT : compiler avec « pdflatex -shell-escape cours_langchain.tex »
+% Prérequis : Python + Pygments installés (pip install Pygments)
+\usepackage[newfloat]{minted}
+
+\definecolor{codegreen}{rgb}{0.0, 0.5, 0.0}
+\definecolor{codegray}{rgb}{0.5, 0.5, 0.5}
+\definecolor{codepurple}{rgb}{0.58, 0.0, 0.83}
+\definecolor{codeblue}{rgb}{0.13, 0.13, 0.55}
+\definecolor{backcolour}{rgb}{0.97, 0.97, 0.94}
+\definecolor{infobg}{rgb}{0.93, 0.95, 1.0}
+\definecolor{warnbg}{rgb}{1.0, 0.96, 0.88}
+
+% Configuration globale de minted : style, encadré, numérotation des lignes
+\setminted{
+    style=friendly,         % autres choix : tango, manni, perldoc, vs, autumn, murphy
+    bgcolor=backcolour,
+    fontsize=\footnotesize,
+    linenos=true,
+    numbersep=6pt,
+    frame=single,
+    framesep=4pt,
+    rulecolor=\color{codegray!40},
+    breaklines=true,
+    breakanywhere=true,
+    tabsize=4,
+    autogobble=true          % retire l'indentation commune (pratique avec autogobble)
+}
+
+% --- TikZ pour les illustrations ---
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, shapes.misc, calc, fit, backgrounds}
+
+% Styles TikZ communs pour les diagrammes du cours
+\tikzset{
+  block/.style={
+    rectangle, rounded corners=3pt,
+    draw=blue!50!black, fill=infobg, line width=0.5pt,
+    minimum height=0.9cm, minimum width=2cm,
+    align=center, font=\small\sffamily,
+    inner sep=4pt
+  },
+  data/.style={
+    rectangle, rounded corners=1pt,
+    draw=gray!60, fill=backcolour, line width=0.4pt,
+    minimum height=0.7cm, minimum width=1.6cm,
+    align=center, font=\scriptsize\ttfamily,
+    inner sep=3pt
+  },
+  store/.style={
+    cylinder, shape border rotate=90, aspect=0.25,
+    draw=blue!50!black, fill=infobg, line width=0.5pt,
+    minimum height=1.1cm, minimum width=1.6cm,
+    align=center, font=\small\sffamily
+  },
+  startend/.style={
+    circle, draw=orange!70!black, fill=warnbg, line width=0.5pt,
+    minimum size=0.9cm, font=\scriptsize\sffamily\bfseries,
+    inner sep=1pt
+  },
+  pipe/.style={-Stealth, thick, blue!50!black},
+  pipe-back/.style={-Stealth, thick, orange!70!black},
+  pipe-dashed/.style={-Stealth, thick, dashed, blue!50!black}
+}
+
+% --- Encadrés pédagogiques ---
+\usepackage{tcolorbox}
+\tcbuselibrary{breakable}
+
+\newtcolorbox{info}[1][]{
+  colback=infobg,
+  colframe=blue!50!black,
+  fonttitle=\bfseries,
+  title=Note,
+  breakable,
+  #1
+}
+
+\newtcolorbox{piege}[1][]{
+  colback=warnbg,
+  colframe=orange!70!black,
+  fonttitle=\bfseries,
+  title=Piège,
+  breakable,
+  #1
+}
+
+% --- Liens ---
+\usepackage[colorlinks=true, linkcolor=blue!60!black, urlcolor=blue!60!black]{hyperref}
+
+% --- Titre ---
+\title{\textbf{LangChain --- Cours intensif}\\[4pt]
+       \large De LCEL aux agents autonomes avec LangGraph}
+\author{Notes de formation}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent Ce document est le polycopié théorique correspondant à la journée d'apprentissage pratique de LangChain. Il couvre les trois grands axes du framework dans l'ordre où ils s'articulent : la composition de chaînes avec LCEL, la recherche augmentée par récupération (RAG), et les agents autonomes orchestrés par LangGraph. Chaque section expose d'abord les concepts, puis la syntaxe canonique, puis les pièges courants. Le projet pratique associé est \textit{PyTutor}, un assistant pédagogique Python construit en trois phases.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+% ============================================================================
+\section{Vue d'ensemble}
+% ============================================================================
+
+\subsection{Qu'est-ce que LangChain ?}
+
+LangChain est un \textbf{framework d'orchestration} pour applications basées sur les modèles de langage. Il ne fournit pas de modèle de langage lui-même : il fournit une \emph{abstraction commune} qui permet de composer des appels de modèles, des opérations sur des données, et des actions sur le monde extérieur, dans un pipeline déclaratif.
+
+L'analogie utile : ce que NumPy est aux tableaux, ce que Django est au web, LangChain l'est aux applications LLM. Ce n'est pas le moteur, c'est la plomberie.
+
+\subsection{Les trois piliers}
+
+Toute application LLM non triviale se construit avec une combinaison de trois mécanismes, qui correspondent aux trois phases du projet pratique :
+
+\begin{enumerate}
+  \item \textbf{Composition} (LCEL) --- enchaîner des étapes déterministes : prompt $\rightarrow$ modèle $\rightarrow$ parsing $\rightarrow$ post-traitement. Phase 1.
+  \item \textbf{Recherche augmentée} (RAG) --- injecter dans le prompt du contexte tiré d'une base documentaire. Phase 2.
+  \item \textbf{Agence} (LangGraph) --- laisser le modèle décider dynamiquement quelles actions entreprendre parmi un ensemble d'outils. Phase 3.
+\end{enumerate}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[node distance=0.4cm]
+  \node[block, minimum width=3.2cm, minimum height=1.1cm] (lcel) {LCEL\\[2pt]\footnotesize Composition};
+  \node[block, minimum width=3.2cm, minimum height=1.1cm, right=0.8cm of lcel] (rag) {RAG\\[2pt]\footnotesize Recherche augmentée};
+  \node[block, minimum width=3.2cm, minimum height=1.1cm, right=0.8cm of rag] (agents) {LangGraph\\[2pt]\footnotesize Agents};
+
+  \node[data, below=of lcel, minimum width=3.2cm, align=center] {\texttt{prompt | model | parser}\\\textit{déterministe}};
+  \node[data, below=of rag, minimum width=3.2cm, align=center] {retriever + LLM\\\textit{contexte dynamique}};
+  \node[data, below=of agents, minimum width=3.2cm, align=center] {tools + boucle\\\textit{décision dynamique}};
+\end{tikzpicture}
+\caption{Les trois piliers de LangChain. Chaque phase du projet PyTutor correspond à l'un d'eux, dans cet ordre.}
+\end{figure}
+
+\subsection{Vocabulaire de base}
+
+\begin{description}
+  \item[LLM (ou chat model)] le modèle de langage lui-même. Dans LangChain, l'interface canonique pour discuter avec un modèle est la classe \texttt{BaseChatModel} (ex.\ \texttt{ChatAnthropic}, \texttt{ChatOpenAI}).
+  \item[Message] unité d'échange avec un chat model. Trois rôles principaux : \texttt{system} (instructions générales), \texttt{human} (input utilisateur), \texttt{ai} (réponse du modèle).
+  \item[Prompt template] gabarit textuel avec des variables (\texttt{\{nom\}}) qui sera rempli au moment de l'appel.
+  \item[Chain] composition de plusieurs étapes formant un pipeline.
+  \item[Tool] fonction Python décorée que le modèle peut décider d'appeler.
+  \item[Agent] boucle qui alterne raisonnement du modèle et appels d'outils jusqu'à atteindre un état terminal.
+  \item[Retriever] objet qui, à partir d'une requête textuelle, renvoie des documents pertinents.
+\end{description}
+
+% ============================================================================
+\section{LCEL --- LangChain Expression Language}
+% ============================================================================
+
+\subsection{Le concept central : Runnable}
+
+LCEL repose sur une unique abstraction : l'interface \texttt{Runnable}. Tout composant LangChain qui produit une transformation \emph{entrée $\rightarrow$ sortie} implémente cette interface. Cela inclut les prompts, les modèles, les parsers, les retrievers, les outils, et les chaînes elles-mêmes.
+
+Tout Runnable expose six méthodes formant trois paires :
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Méthode} & \textbf{Variante async} & \textbf{Description} \\
+\midrule
+\texttt{.invoke(input)}   & \texttt{.ainvoke(input)}   & Un input, une sortie \\
+\texttt{.stream(input)}   & \texttt{.astream(input)}   & Sortie en flux (tokens) \\
+\texttt{.batch(inputs)}   & \texttt{.abatch(inputs)}   & Plusieurs inputs en parallèle \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{info}
+Cette uniformité d'interface est ce qui rend LangChain composable. Quel que soit le composant manipulé, on sait comment l'appeler. Quand on remplace un modèle par un autre, ou un parser par un autre, le code appelant ne change pas.
+\end{info}
+
+\subsection{L'opérateur pipe}
+
+Deux Runnable se composent avec l'opérateur \texttt{|} (pipe). Le résultat est lui-même un Runnable.
+
+\begin{minted}{python}
+chain = prompt | model | parser
+result = chain.invoke({"question": "Qu'est-ce qu'un décorateur ?"})
+\end{minted}
+
+L'expression \texttt{prompt | model | parser} ne fait \emph{rien} : elle construit un objet qui décrit la composition. L'exécution n'a lieu qu'au moment du \texttt{.invoke()}. C'est le même paradigme que les QuerySet Django ou les expressions pandas en mode \texttt{lazy}.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[node distance=0.6cm]
+  \node[data] (input) {\{question:\ldots\}};
+  \node[block, right=of input] (prompt) {Prompt\\Template};
+  \node[block, right=of prompt] (model) {Chat\\Model};
+  \node[block, right=of model] (parser) {Output\\Parser};
+  \node[data, right=of parser] (output) {réponse};
+
+  \draw[pipe] (input) -- node[midway, above, font=\footnotesize\ttfamily, text=blue!50!black] {|} (prompt);
+  \draw[pipe] (prompt) -- node[midway, above, font=\footnotesize\ttfamily, text=blue!50!black] {|} (model);
+  \draw[pipe] (model) -- node[midway, above, font=\footnotesize\ttfamily, text=blue!50!black] {|} (parser);
+  \draw[pipe] (parser) -- (output);
+\end{tikzpicture}
+\caption{Le pipeline LCEL canonique. L'opérateur \texttt{|} compose des \texttt{Runnable}, qui exposent tous la même interface (\texttt{.invoke}, \texttt{.stream}, \texttt{.batch}).}
+\end{figure}
+
+\subsection{ChatPromptTemplate}
+
+Le template de prompt canonique pour les chat models. On le construit à partir d'une liste de tuples \texttt{(role, contenu)} :
+
+\begin{minted}{python}
+from langchain_core.prompts import ChatPromptTemplate
+
+prompt = ChatPromptTemplate.from_messages([
+    ("system", "Tu es un assistant Python pour des elèves de niveau {level}."),
+    ("human", "Explique le concept suivant : {concept}"),
+])
+
+# Les variables {level} et {concept} seront rempliees par le dict passé
+# au .invoke() (ou hérité de l'étape précédente dans une chaîne).
+\end{minted}
+
+\subsubsection*{Fixer une variable en avance : \texttt{.partial()}}
+
+\begin{minted}{python}
+beginner_prompt = prompt.partial(level="débutant")
+# Maintenant beginner_prompt n'a plus qu'une variable libre : {concept}
+\end{minted}
+
+C'est l'équivalent de \texttt{functools.partial} appliqué à un template. Très utile pour construire des chaînes spécialisées à partir d'un template général.
+
+\subsection{Modèles de chat}
+
+\begin{minted}{python}
+from langchain_anthropic import ChatAnthropic
+
+model = ChatAnthropic(
+    model="claude-haiku-4-5-20251001",
+    temperature=0.0,    # 0 = déterministe, 1 = créatif
+    max_tokens=2048,
+)
+
+response = model.invoke("Bonjour")
+# response est un objet AIMessage. Le texte est dans response.content
+\end{minted}
+
+Quand on \texttt{pipe} un \texttt{ChatPromptTemplate} dans un modèle, le template est formaté avec les variables, le résultat est une liste de messages, et c'est cette liste qui part au modèle.
+
+\subsection{Output parsers}
+
+Un output parser transforme la sortie du modèle (objet \texttt{AIMessage}) en quelque chose d'exploitable.
+
+\begin{minted}{python}
+from langchain_core.output_parsers import StrOutputParser
+
+chain = prompt | model | StrOutputParser()
+# Renvoie directement une chaîne de caractères, plus l'objet AIMessage
+\end{minted}
+
+\subsection{Streaming}
+
+Tout Runnable expose \texttt{.stream()}, qui renvoie un générateur de morceaux de la sortie au fur et à mesure de leur production par le modèle.
+
+\begin{minted}{python}
+for chunk in chain.stream({"concept": "les générateurs"}):
+    print(chunk, end="", flush=True)
+\end{minted}
+
+C'est ce qui produit l'effet \og machine à écrire \fg{} dans les interfaces de chat. Indispensable pour l'UX de toute application interactive.
+
+\subsection{Asynchrone}
+
+Les variantes \texttt{a*} de chaque méthode sont des coroutines, à utiliser avec \texttt{asyncio} :
+
+\begin{minted}{python}
+import asyncio
+
+async def main():
+    result = await chain.ainvoke({"concept": "..."})
+    # ou avec gather pour paralléliser :
+    results = await asyncio.gather(
+        chain.ainvoke({"concept": "décorateurs"}),
+        chain.ainvoke({"concept": "métaclasses"}),
+    )
+
+asyncio.run(main())
+\end{minted}
+
+% ============================================================================
+\section{Sortie structurée}
+% ============================================================================
+
+\subsection{Le problème}
+
+Un LLM produit du texte. Dès qu'une application a besoin d'exploiter cette sortie de manière programmatique (extraire des champs, alimenter une base de données, conditionner une logique), il faut une garantie sur la structure du texte. Les premières approches consistaient à demander au modèle de produire du JSON et à parser ce JSON --- avec un taux d'échec non négligeable (malformation, texte avant ou après, hallucinations de champs).
+
+\subsection{La solution moderne : \texttt{with\_structured\_output}}
+
+Anthropic et OpenAI exposent une capacité de \emph{tool calling} qui force le modèle à produire un objet conforme à un schéma JSON donné. LangChain expose cela via la méthode \texttt{with\_structured\_output} appliquée au modèle.
+
+\begin{minted}{python}
+from pydantic import BaseModel, Field
+
+class Explanation(BaseModel):
+    concept: str = Field(description="Le concept expliqué.")
+    intuition: str = Field(description="Explication en 3 phrases.")
+    code_example: str = Field(description="Exemple de code commenté.")
+    pitfall: str = Field(description="Un piège classique.")
+
+model = ChatAnthropic(model="...").with_structured_output(Explanation)
+
+result = (prompt | model).invoke({"concept": "décorateurs"})
+# `result` est un objet Explanation, typé, avec auto-complétion dans l'IDE.
+print(result.intuition)
+\end{minted}
+
+\begin{info}
+Les \texttt{description} des \texttt{Field} Pydantic sont envoyées au modèle comme partie du schéma. Plus elles sont précises, meilleure est la sortie. C'est l'occasion de glisser des contraintes (\og exactement 3 phrases \fg, \og pas plus de 10 lignes \fg, \og en français \fg).
+\end{info}
+
+\subsection{Schémas imbriqués}
+
+Pydantic gère les schémas composés, ce qui permet de modéliser des sorties riches :
+
+\begin{minted}{python}
+class Question(BaseModel):
+    question: str
+    expected_answer: str
+
+class Explanation(BaseModel):
+    concept: str
+    intuition: str
+    questions: list[Question]  # liste d'objets imbriqués
+\end{minted}
+
+\subsection{Méthode héritée : \texttt{PydanticOutputParser}}
+
+On rencontre encore dans la documentation et les tutoriels antérieurs à 2024 l'approche \texttt{PydanticOutputParser}, qui consiste à injecter dans le prompt des instructions de formatage générées à partir du schéma, puis à parser le JSON en sortie. \textbf{C'est l'ancienne voie}, moins fiable. Préférer systématiquement \texttt{with\_structured\_output} quand le modèle le supporte (Claude, GPT-4, Gemini).
+
+% ============================================================================
+\section{Parallélisme : RunnableParallel et batch}
+% ============================================================================
+
+\subsection{RunnableParallel}
+
+Pour exécuter plusieurs chaînes \emph{en concurrence} sur le même input, on utilise \texttt{RunnableParallel}. Les sous-chaînes partent simultanément ; la latence totale est celle de la sous-chaîne la plus lente, pas la somme.
+
+\begin{minted}{python}
+from langchain_core.runnables import RunnableParallel
+
+multi = RunnableParallel(
+    beginner=beginner_chain,
+    intermediate=intermediate_chain,
+    advanced=advanced_chain,
+)
+
+results = multi.invoke({"concept": "les générateurs"})
+# results est un dict : {"beginner": ..., "intermediate": ..., "advanced": ...}
+\end{minted}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[node distance=0.8cm]
+  \node[data] (input) {\{concept:\ldots\}};
+  \node[block, right=2.2cm of input, yshift=1.1cm] (c1) {beginner};
+  \node[block, right=2.2cm of input] (c2) {intermediate};
+  \node[block, right=2.2cm of input, yshift=-1.1cm] (c3) {advanced};
+  \node[data, right=5cm of input, align=left] (output) {\{beginner: r1,\\\phantom{\{}intermediate: r2,\\\phantom{\{}advanced: r3\}};
+
+  \draw[pipe] (input) -- (c1);
+  \draw[pipe] (input) -- (c2);
+  \draw[pipe] (input) -- (c3);
+  \draw[pipe] (c1) -- (output);
+  \draw[pipe] (c2) -- (output);
+  \draw[pipe] (c3) -- (output);
+
+  \node[below=0.15cm of c3, font=\scriptsize\itshape, text=gray] {3 appels LLM en concurrence};
+\end{tikzpicture}
+\caption{\texttt{RunnableParallel} : un seul input, plusieurs chaînes lancées simultanément. La latence totale est celle de la chaîne la plus lente, pas la somme.}
+\end{figure}
+
+\subsection{Batch}
+
+Pour exécuter \emph{la même chaîne} sur plusieurs inputs en parallèle :
+
+\begin{minted}{python}
+inputs = [{"concept": c} for c in ["décorateurs", "métaclasses", "GIL"]]
+results = chain.batch(inputs)  # liste, dans l'ordre des inputs
+\end{minted}
+
+\subsection{Composition fine : RunnablePassthrough et RunnableLambda}
+
+Deux outils utilitaires reviennent constamment dans des chaînes plus complexes :
+
+\begin{minted}{python}
+from langchain_core.runnables import RunnablePassthrough, RunnableLambda
+
+# Passthrough : laisse passer l'input tel quel, utile pour construire un dict.
+# Lambda : enveloppe une fonction Python ordinaire en Runnable.
+
+chain = (
+    {
+        "context": retriever,           # appel d'un Runnable
+        "question": RunnablePassthrough()  # garde la valeur d'entrée
+    }
+    | prompt
+    | model
+    | StrOutputParser()
+)
+\end{minted}
+
+Le dict Python est interprété comme un \texttt{RunnableParallel}, et chaque valeur peut être un Runnable.
+
+% ============================================================================
+\section{RAG --- Retrieval-Augmented Generation}
+% ============================================================================
+
+\subsection{Pourquoi}
+
+Un LLM a deux limites structurelles que le RAG vient corriger :
+
+\begin{enumerate}
+  \item Il ne connaît pas les données privées de l'utilisateur (documents internes, base de connaissance, fichiers récents).
+  \item Sa connaissance générale est figée à la date de coupure de son entraînement, et il peut halluciner sur les faits.
+\end{enumerate}
+
+Le RAG (\emph{Retrieval-Augmented Generation}) consiste à \textbf{retrouver dynamiquement} des passages pertinents dans une base documentaire, puis à les \textbf{injecter dans le prompt} comme contexte avant de poser la question au modèle.
+
+\subsection{Le pipeline canonique}
+
+\begin{enumerate}
+  \item \textbf{Indexation} (offline, une fois) :
+    \begin{enumerate}[label=(\alph*)]
+      \item Charger les documents (\texttt{DocumentLoader})
+      \item Les découper en fragments (\texttt{TextSplitter})
+      \item Calculer des vecteurs (\texttt{Embeddings})
+      \item Stocker dans une base vectorielle (\texttt{VectorStore})
+    \end{enumerate}
+  \item \textbf{Interrogation} (online, à chaque question) :
+    \begin{enumerate}[label=(\alph*)]
+      \item Encoder la question en vecteur
+      \item Rechercher les fragments les plus similaires (\texttt{Retriever})
+      \item Injecter ces fragments dans le prompt
+      \item Appeler le modèle
+    \end{enumerate}
+\end{enumerate}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[node distance=0.4cm and 0.45cm]
+  % --- Phase 1 : Indexation ---
+  \node[font=\bfseries\small, text=blue!50!black] (t1) at (0, 0.5) {(1) Indexation --- offline, une fois};
+  \node[data, below=of t1, xshift=-5.2cm] (docs) {Documents};
+  \node[block, right=of docs] (loader) {Loader};
+  \node[block, right=of loader] (splitter) {Splitter};
+  \node[block, right=of splitter] (embed1) {Embeddings};
+  \node[store, right=of embed1] (store1) {Vector\\Store};
+
+  \draw[pipe] (docs) -- (loader);
+  \draw[pipe] (loader) -- (splitter);
+  \draw[pipe] (splitter) -- (embed1);
+  \draw[pipe] (embed1) -- (store1);
+
+  % --- Séparateur ---
+  \draw[dashed, gray!50] (-6.2, -1.8) -- (6.2, -1.8);
+
+  % --- Phase 2 : Interrogation ---
+  \node[font=\bfseries\small, text=blue!50!black] (t2) at (0, -2.3) {(2) Interrogation --- online, à chaque question};
+  \node[data, below=of t2, xshift=-5.2cm] (question) {Question};
+  \node[block, right=of question] (embed2) {Embed};
+  \node[store, right=of embed2] (store2) {Vector\\Store};
+  \node[block, right=of store2] (topk) {Top-k};
+  \node[block, right=of topk] (llm) {LLM};
+  \node[data, right=of llm] (answer) {Réponse};
+
+  \draw[pipe] (question) -- (embed2);
+  \draw[pipe] (embed2) -- (store2);
+  \draw[pipe] (store2) -- (topk);
+  \draw[pipe] (topk) -- (llm);
+  \draw[pipe] (llm) -- (answer);
+\end{tikzpicture}
+\caption{Pipeline RAG complet. L'indexation est lente, faite une seule fois ; l'interrogation est rapide, répétée à chaque question. Le \texttt{Vector Store} fait le lien entre les deux phases.}
+\end{figure}
+
+\subsection{Document loaders}
+
+Adaptateurs pour différents formats. Chacun renvoie une liste d'objets \texttt{Document} (texte + métadonnées).
+
+\begin{minted}{python}
+from langchain_community.document_loaders import (
+    WebBaseLoader,            # pages web
+    DirectoryLoader,          # arborescence
+    PyPDFLoader,              # PDF
+    UnstructuredMarkdownLoader,  # markdown
+)
+
+loader = WebBaseLoader("https://docs.python.org/3/tutorial/classes.html")
+docs = loader.load()  # liste de Document
+\end{minted}
+
+\subsection{Text splitters}
+
+Les modèles d'embeddings et de génération ont une fenêtre de contexte limitée ; les documents doivent être découpés en fragments (\emph{chunks}) de taille raisonnable.
+
+\begin{minted}{python}
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+splitter = RecursiveCharacterTextSplitter(
+    chunk_size=1000,       # caractères par fragment
+    chunk_overlap=200,     # chevauchement, pour ne pas couper une idée
+)
+chunks = splitter.split_documents(docs)
+\end{minted}
+
+Le \texttt{Recursive\-CharacterTextSplitter} est le défaut raisonnable : il tente d'abord de couper aux séparateurs naturels (paragraphes, phrases, mots) avant de couper arbitrairement.
+
+\begin{piege}
+Le \texttt{chunk\_overlap} n'est pas optionnel. Sans chevauchement, on coupe inévitablement des idées en deux, et la recherche échoue à les retrouver. Une règle empirique : \texttt{chunk\_overlap} entre 10 \% et 20 \% de \texttt{chunk\_size}.
+\end{piege}
+
+\subsection{Embeddings}
+
+Un \emph{embedding} est une fonction qui transforme un texte en vecteur de réels dans un espace de haute dimension (typiquement 384, 768 ou 1536 dimensions). La propriété clé : \textbf{deux textes sémantiquement proches ont des vecteurs proches} (au sens de la similarité cosinus).
+
+\begin{minted}{python}
+from langchain_huggingface import HuggingFaceEmbeddings
+
+embeddings = HuggingFaceEmbeddings(
+    model_name="sentence-transformers/all-MiniLM-L6-v2"
+)
+
+vec = embeddings.embed_query("Qu'est-ce qu'un décorateur ?")
+# vec est une liste de 384 floats
+\end{minted}
+
+\subsection{Vector stores}
+
+Base de données spécialisée pour le stockage et la recherche par similarité de vecteurs. Plusieurs implémentations existent : Chroma (simple, local), FAISS (rapide, en mémoire), Pinecone, Weaviate, pgvector\ldots
+
+\begin{minted}{python}
+from langchain_chroma import Chroma
+
+vectorstore = Chroma.from_documents(
+    documents=chunks,
+    embedding=embeddings,
+    persist_directory="./chroma_db",  # persistance sur disque
+)
+
+# Plus tard, on recharge sans tout réindexer :
+vectorstore = Chroma(
+    persist_directory="./chroma_db",
+    embedding_function=embeddings,
+)
+\end{minted}
+
+\subsection{Retriever}
+
+Le retriever est l'interface Runnable qui prend une question textuelle et renvoie une liste de documents pertinents.
+
+\begin{minted}{python}
+retriever = vectorstore.as_retriever(
+    search_type="similarity",  # ou "mmr"
+    search_kwargs={"k": 4},    # top 4 documents
+)
+
+docs = retriever.invoke("Comment fonctionne un décorateur ?")
+\end{minted}
+
+\subsection{Chaîne RAG complète en LCEL}
+
+\begin{minted}{python}
+from langchain_core.runnables import RunnablePassthrough
+
+rag_prompt = ChatPromptTemplate.from_messages([
+    ("system",
+     "Réponds à la question en t'appuyant UNIQUEMENT sur le contexte fourni. "
+     "Si la réponse n'est pas dans le contexte, dis-le explicitement."),
+    ("human", "Contexte :\n{context}\n\nQuestion : {question}"),
+])
+
+def format_docs(docs):
+    return "\n\n".join(d.page_content for d in docs)
+
+rag_chain = (
+    {
+        "context": retriever | format_docs,
+        "question": RunnablePassthrough(),
+    }
+    | rag_prompt
+    | model
+    | StrOutputParser()
+)
+
+answer = rag_chain.invoke("Comment écrire un décorateur avec arguments ?")
+\end{minted}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[node distance=0.6cm]
+  \node[data] (input) {"Comment\ldots ?"};
+
+  \node[block, right=1.4cm of input, yshift=0.8cm] (ret) {retriever | format};
+  \node[block, right=1.4cm of input, yshift=-0.8cm] (pass) {Passthrough};
+
+  \node[data, right=1.5cm of ret] (ctx) {context: "\ldots"};
+  \node[data, right=1.5cm of pass] (q) {question: "\ldots"};
+
+  \node[block, right=1cm of ctx, yshift=-0.8cm] (prompt) {Prompt};
+  \node[block, right=of prompt] (model) {Model};
+  \node[block, right=of model] (parser) {Parser};
+  \node[data, right=of parser] (out) {réponse};
+
+  \draw[pipe] (input) -- (ret);
+  \draw[pipe] (input) -- (pass);
+  \draw[pipe] (ret) -- (ctx);
+  \draw[pipe] (pass) -- (q);
+  \draw[pipe] (ctx) -- (prompt);
+  \draw[pipe] (q) -- (prompt);
+  \draw[pipe] (prompt) -- (model);
+  \draw[pipe] (model) -- (parser);
+  \draw[pipe] (parser) -- (out);
+\end{tikzpicture}
+\caption{Le pattern LCEL canonique du RAG. Le dict en entrée crée deux branches parallèles (recherche + passthrough) qui convergent dans le prompt. C'est l'idiome le plus important à reconnaître.}
+\end{figure}
+
+\subsection{Stratégies de recherche avancées}
+
+\subsubsection*{MMR (Maximal Marginal Relevance)}
+
+La recherche par similarité brute renvoie souvent des résultats redondants (plusieurs chunks qui disent la même chose). MMR pénalise la similarité entre résultats pour favoriser la diversité.
+
+\begin{minted}{python}
+retriever = vectorstore.as_retriever(
+    search_type="mmr",
+    search_kwargs={"k": 4, "fetch_k": 20, "lambda_mult": 0.5},
+)
+\end{minted}
+
+\subsubsection*{MultiQueryRetriever}
+
+Reformule automatiquement la question initiale en plusieurs variantes via un LLM, lance une recherche pour chacune, et fusionne les résultats. Améliore le rappel.
+
+\begin{minted}{python}
+from langchain.retrievers.multi_query import MultiQueryRetriever
+
+multi_retriever = MultiQueryRetriever.from_llm(
+    retriever=vectorstore.as_retriever(),
+    llm=model,
+)
+\end{minted}
+
+% ============================================================================
+\section{Tools et agents}
+% ============================================================================
+
+\subsection{Le concept d'agent}
+
+Un agent est une boucle de décision : à chaque tour, le modèle reçoit l'historique de la conversation et la liste des outils disponibles, et il choisit soit de répondre à l'utilisateur, soit d'appeler un outil. Quand un outil est appelé, son résultat est ajouté à l'historique et le modèle reprend la main. La boucle s'arrête quand le modèle décide qu'il a assez d'information pour répondre.
+
+Ce schéma est appelé \textbf{ReAct} (\emph{Reasoning + Acting}).
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[node distance=1.5cm]
+  \node[block, minimum width=2.4cm] (think) {Réfléchir\\\scriptsize (LLM)};
+  \node[block, minimum width=2.4cm, right=2.5cm of think] (act) {Agir\\\scriptsize (tool call)};
+  \node[block, minimum width=2.4cm, below=1.3cm of act] (observe) {Observer\\\scriptsize (tool result)};
+  \node[startend, right=2.5cm of act] (final) {Fin};
+
+  \draw[pipe] (think) -- node[above, font=\scriptsize, align=center] {décide d'appeler\\un tool} (act);
+  \draw[pipe] (act) -- (observe);
+  \draw[pipe-back] (observe) -- node[midway, left, font=\scriptsize, align=center] {résultat\\ajouté à\\l'historique} (think);
+  \draw[pipe] (act) -- node[above, font=\scriptsize, align=center] {réponse\\complète} (final);
+\end{tikzpicture}
+\caption{La boucle ReAct. À chaque tour, le modèle relit l'historique et décide : appeler un tool, ou répondre. Quand il a assez d'information, il sort de la boucle.}
+\end{figure}
+
+\subsection{Définir un outil avec \texttt{@tool}}
+
+\begin{minted}{python}
+from langchain_core.tools import tool
+
+@tool
+def search_docs(query: str) -> str:
+    """Recherche dans la documentation Python.
+    
+    Args:
+        query: La question ou les mots-clés à chercher.
+    """
+    docs = retriever.invoke(query)
+    return "\n\n".join(d.page_content for d in docs)
+\end{minted}
+
+Trois éléments sont envoyés au modèle pour qu'il sache appeler l'outil :
+\begin{itemize}
+  \item Le \textbf{nom} de la fonction.
+  \item La \textbf{docstring} (devient la description).
+  \item Le \textbf{schéma} des arguments, déduit des annotations de type.
+\end{itemize}
+
+\begin{piege}
+La docstring n'est pas décorative : c'est elle qui dit au modèle ce que fait l'outil et quand l'utiliser. Une docstring vide ou peu informative donne un agent qui prend de mauvaises décisions. Le format Google ou NumPy est lu et parsé.
+\end{piege}
+
+\subsection{create\_react\_agent : la voie courte}
+
+Pour 90 \% des besoins, \texttt{create\_react\_agent} de \texttt{langgraph.prebuilt} suffit. Il construit l'agent ReAct standard à partir d'un modèle et d'une liste d'outils.
+
+\begin{minted}{python}
+from langgraph.prebuilt import create_react_agent
+
+agent = create_react_agent(
+    model=model,
+    tools=[search_docs, run_python_code, generate_exercise],
+)
+
+result = agent.invoke({
+    "messages": [("human", "Explique-moi les générateurs et donne-moi un exercice.")]
+})
+# result["messages"] contient tout l'historique : appels d'outils, résultats, réponse finale.
+\end{minted}
+
+\begin{info}
+On voit encore dans la documentation antérieure à 2024 l'\texttt{AgentExecutor} et la fonction \texttt{create\_react\_agent} du package \texttt{langchain.agents}. Cette voie est en cours de dépréciation. La voie officielle depuis 2024 est \texttt{langgraph.prebuilt.create\_react\_agent}.
+\end{info}
+
+% ============================================================================
+\section{LangGraph --- agents personnalisés}
+% ============================================================================
+
+\subsection{Quand passer à LangGraph custom}
+
+\texttt{create\_react\_agent} couvre le motif standard. Dès qu'on a besoin de :
+\begin{itemize}
+  \item un état partagé entre étapes (mémoire, profil utilisateur, statistiques),
+  \item des boucles de validation (\emph{re-essayer si la réponse n'est pas satisfaisante}),
+  \item un graphe non trivial (branchements conditionnels, retours en arrière),
+  \item plusieurs agents qui collaborent (\emph{multi-agent}),
+\end{itemize}
+\noindent on construit un graphe explicite avec \texttt{StateGraph}.
+
+\subsection{Le modèle mental}
+
+Un \texttt{StateGraph} est défini par trois choses :
+\begin{enumerate}
+  \item Un \textbf{état} typé (généralement un \texttt{TypedDict}) qui circule entre les n{\oe}uds.
+  \item Des \textbf{n{\oe}uds} qui sont des fonctions \texttt{state $\rightarrow$ partial\_state}.
+  \item Des \textbf{arêtes} qui relient les n{\oe}uds, éventuellement conditionnelles.
+\end{enumerate}
+
+\subsection{Squelette minimal}
+
+\begin{minted}{python}
+from typing import TypedDict, Annotated
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+from langchain_core.messages import BaseMessage
+
+class State(TypedDict):
+    messages: Annotated[list[BaseMessage], add_messages]
+    student_level: str
+
+def retrieve_node(state: State) -> dict:
+    last_msg = state["messages"][-1].content
+    docs = retriever.invoke(last_msg)
+    context = "\n".join(d.page_content for d in docs)
+    return {"messages": [("system", f"Contexte: {context}")]}
+
+def answer_node(state: State) -> dict:
+    response = model.invoke(state["messages"])
+    return {"messages": [response]}
+
+graph = StateGraph(State)
+graph.add_node("retrieve", retrieve_node)
+graph.add_node("answer", answer_node)
+graph.add_edge(START, "retrieve")
+graph.add_edge("retrieve", "answer")
+graph.add_edge("answer", END)
+
+app = graph.compile()
+result = app.invoke({
+    "messages": [("human", "Explique les décorateurs.")],
+    "student_level": "intermédiaire",
+})
+\end{minted}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[node distance=1.4cm]
+  \node[startend] (start) {START};
+  \node[block, right=of start] (retrieve) {retrieve\_node};
+  \node[block, right=of retrieve] (answer) {answer\_node};
+  \node[startend, right=of answer] (end) {END};
+
+  \draw[pipe] (start) -- (retrieve);
+  \draw[pipe] (retrieve) -- node[above, font=\scriptsize] {context} (answer);
+  \draw[pipe] (answer) -- (end);
+
+  \node[below=0.9cm of retrieve, xshift=1cm, font=\scriptsize\itshape, text=gray, align=center, draw=gray!40, rounded corners=2pt, inner sep=4pt, fill=backcolour] (state) {État partagé qui circule entre tous les nœuds\\\texttt{\{messages: [\ldots], student\_level: "\ldots"\}}};
+\end{tikzpicture}
+\caption{Un \texttt{StateGraph} minimal en LangGraph. Les nœuds sont des fonctions Python pures \texttt{(état) $\to$ (état partiel)}. L'état est typé et accumulé via des \emph{reducers}.}
+\end{figure}
+
+\subsection{Le pattern reducer}
+
+L'annotation \texttt{Annotated[list[BaseMessage], add\_messages]} mérite une explication. Par défaut, quand un n{\oe}ud renvoie une clé déjà présente dans l'état, la valeur écrase l'ancienne. Avec un \emph{reducer} (ici \texttt{add\_messages}), la nouvelle valeur est \emph{combinée} avec l'ancienne. Pour les messages, cela signifie \og ajouter à la conversation \fg{} plutôt que \og remplacer toute la conversation \fg.
+
+\subsection{Arêtes conditionnelles}
+
+Pour un branchement dynamique :
+
+\begin{minted}{python}
+def should_retrieve(state: State) -> str:
+    # Renvoie le nom du prochain noeud
+    if "documentation" in state["messages"][-1].content.lower():
+        return "retrieve"
+    return "answer"
+
+graph.add_conditional_edges(
+    "classify",          # noeud source
+    should_retrieve,     # fonction de routage
+    {"retrieve": "retrieve", "answer": "answer"},  # mapping
+)
+\end{minted}
+
+% ============================================================================
+\section{Observabilité avec LangSmith}
+% ============================================================================
+
+LangSmith est le service d'observabilité officiel de LangChain. Trois variables d'environnement suffisent à l'activer :
+
+\begin{minted}{bash}
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_API_KEY=lsv2_...
+LANGCHAIN_PROJECT=mon-projet
+\end{minted}
+
+Chaque \texttt{.invoke()} produit une trace visualisable dans une interface web : on voit chaque étape de la chaîne, les inputs et outputs intermédiaires, la consommation de tokens, la latence. C'est le seul outil qui permet de déboguer sérieusement une chaîne complexe ou un agent.
+
+\begin{info}
+Quand un agent prend une mauvaise décision, regarder la trace LangSmith en premier fait gagner un temps considérable. On y voit exactement le prompt complet envoyé au modèle, et la sortie brute --- ce qui éclaire neuf bugs sur dix.
+\end{info}
+
+% ============================================================================
+\section{Bonnes pratiques}
+% ============================================================================
+
+\subsection{Versionner les prompts}
+
+Les prompts sont du code. Ils méritent leur place dans le contrôle de version, leurs tests, leurs revues. Les sortir dans des fichiers dédiés (par exemple un module \texttt{prompts.py}) facilite la comparaison entre versions et l'A/B testing.
+
+\subsection{Tester les chaînes}
+
+Une chaîne LangChain reste du Python. Elle se teste avec \texttt{pytest} comme n'importe quoi d'autre :
+
+\begin{minted}{python}
+def test_explain_returns_three_questions():
+    result = explain_chain.invoke({"concept": "décorateurs"})
+    assert len(result.comprehension_questions) == 3
+    assert all(q.question for q in result.comprehension_questions)
+\end{minted}
+
+Pour éviter d'appeler l'API en boucle, on peut soit utiliser un cache (\texttt{set\_llm\_cache}), soit \emph{mocker} la classe de modèle.
+
+\subsection{Gestion des coûts}
+
+Pendant le développement, utiliser le modèle le moins cher (Haiku) accélère l'itération et préserve le budget. Passer à Sonnet ou Opus pour les évaluations de qualité finale uniquement.
+
+\subsection{Streaming pour l'UX}
+
+Pour toute interface utilisateur interactive, le streaming est essentiel. Une réponse de 30 secondes qui apparaît d'un coup donne l'impression d'un système cassé ; la même réponse en streaming donne l'impression d'un système réactif, même si la latence totale est identique.
+
+% ============================================================================
+\appendix
+\section{Aide-mémoire des imports}
+% ============================================================================
+
+\begin{minted}{python}
+# Coeur (toujours)
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import (
+    RunnableParallel, RunnablePassthrough, RunnableLambda
+)
+from langchain_core.tools import tool
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+
+# Modèles
+from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI  # alternatif
+
+# RAG
+from langchain_community.document_loaders import WebBaseLoader, PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_chroma import Chroma
+
+# Agents
+from langgraph.prebuilt import create_react_agent
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+
+# Pydantic
+from pydantic import BaseModel, Field
+\end{minted}
+
+\section{Récapitulatif des motifs LCEL}
+
+\begin{center}
+\begin{tabular}{p{6cm}p{8cm}}
+\toprule
+\textbf{Motif} & \textbf{Syntaxe} \\
+\midrule
+Chaîne basique & \texttt{prompt | model | parser} \\
+Sortie typée & \texttt{prompt | model.with\_structured\_output(Schema)} \\
+Plusieurs sorties en parallèle & \texttt{RunnableParallel(a=chain1, b=chain2)} \\
+Plusieurs inputs en parallèle & \texttt{chain.batch([\{...\}, \{...\}])} \\
+Streaming & \texttt{for c in chain.stream(input)} \\
+Composer en async & \texttt{await chain.ainvoke(input)} \\
+Garder l'input & \texttt{\{"ctx": retriever, "q": RunnablePassthrough()\}} \\
+Insérer une fonction Python & \texttt{RunnableLambda(ma\_fonction)} \\
+Figer une variable de prompt & \texttt{prompt.partial(var=value)} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Pour aller plus loin}
+
+\begin{itemize}
+  \item Documentation officielle LangChain : \url{https://python.langchain.com/docs/}
+  \item Documentation LangGraph : \url{https://langchain-ai.github.io/langgraph/}
+  \item LangSmith (observabilité) : \url{https://smith.langchain.com/}
+  \item Documentation Anthropic (tool use, prompt caching) : \url{https://docs.claude.com/}
+  \item Article de référence sur ReAct : Yao et al., \emph{ReAct: Synergizing Reasoning and Acting in Language Models}, 2022.
+\end{itemize}
+
+\end{document}
